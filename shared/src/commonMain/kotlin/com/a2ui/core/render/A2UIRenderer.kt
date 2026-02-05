@@ -394,8 +394,11 @@ private fun RenderList(
             }
         }
     } else {
-        LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(children) { child ->
+        // Use Column instead of LazyColumn to avoid infinite height constraint
+        // issues when nested inside a Scrollable or verticalScroll parent.
+        // Agent-driven lists are typically bounded in size.
+        Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (child in children) {
                 val cr = if (child.scopedData != null) resolver.withScopedData(child.scopedData) else resolver
                 RenderComponent(child.componentId, surface, cr, onAction)
             }
