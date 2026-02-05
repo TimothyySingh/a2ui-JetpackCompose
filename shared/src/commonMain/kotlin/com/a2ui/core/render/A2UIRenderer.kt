@@ -7,294 +7,594 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.a2ui.core.model.*
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.contentOrNull
+import com.a2ui.core.resolve.*
+import kotlinx.serialization.json.*
 
 /**
- * A2UI Renderer - Converts A2UI schema to Compose UI
+ * A2UI v0.9 Renderer - Converts A2UISurface to Compose UI via flat component map lookup.
  */
 @Composable
 fun A2UIRenderer(
-    document: A2UIDocument,
+    surface: A2UISurface,
     onAction: (A2UIActionEvent) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    RenderNode(
-        node = document.root,
+    val resolver = remember(surface.data) {
+        DynamicResolver(ResolverContext(surface.data))
+    }
+
+    RenderComponent(
+        componentId = surface.root,
+        surface = surface,
+        resolver = resolver,
         onAction = onAction,
         modifier = modifier
     )
 }
 
 @Composable
-fun RenderNode(
-    node: A2UINode,
+fun RenderComponent(
+    componentId: String,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
     onAction: (A2UIActionEvent) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val nodeModifier = modifier
-        .applyProps(node.props)
-        .applyActions(node, onAction)
-    
-    when (node.type) {
-        // Layout
-        A2UINodeType.COLUMN -> RenderColumn(node, onAction, nodeModifier)
-        A2UINodeType.ROW -> RenderRow(node, onAction, nodeModifier)
-        A2UINodeType.BOX -> RenderBox(node, onAction, nodeModifier)
-        A2UINodeType.CARD -> RenderCard(node, onAction, nodeModifier)
-        A2UINodeType.SCAFFOLD -> RenderScaffold(node, onAction, nodeModifier)
-        A2UINodeType.SCROLLABLE -> RenderScrollable(node, onAction, nodeModifier)
-        A2UINodeType.LAZY_COLUMN -> RenderLazyColumn(node, onAction, nodeModifier)
-        A2UINodeType.LAZY_ROW -> RenderLazyRow(node, onAction, nodeModifier)
-        
+    val component = surface.components[componentId] ?: return
+
+    when (component.component) {
         // Content
-        A2UINodeType.TEXT -> RenderText(node, nodeModifier)
-        A2UINodeType.IMAGE -> RenderImage(node, nodeModifier)
-        A2UINodeType.ICON -> RenderIcon(node, nodeModifier)
-        A2UINodeType.SPACER -> RenderSpacer(node, nodeModifier)
-        A2UINodeType.DIVIDER -> HorizontalDivider(nodeModifier)
-        
+        "Text" -> RenderText(component, resolver, modifier)
+        "Image" -> RenderImage(component, resolver, modifier)
+        "Icon" -> RenderIcon(component, resolver, modifier)
+        "Video" -> RenderVideo(component, resolver, modifier)
+        "AudioPlayer" -> RenderAudioPlayer(component, resolver, onAction, modifier)
+
+        // Layout
+        "Row" -> RenderRow(component, surface, resolver, onAction, modifier)
+        "Column" -> RenderColumn(component, surface, resolver, onAction, modifier)
+        "Card" -> RenderCard(component, surface, resolver, onAction, modifier)
+        "List" -> RenderList(component, surface, resolver, onAction, modifier)
+        "Tabs" -> RenderTabs(component, surface, resolver, onAction, modifier)
+        "Modal" -> RenderModal(component, surface, resolver, onAction, modifier)
+        "Divider" -> RenderDivider(component, modifier)
+
         // Input
-        A2UINodeType.BUTTON -> RenderButton(node, onAction, nodeModifier)
-        A2UINodeType.TEXT_FIELD -> RenderTextField(node, onAction, nodeModifier)
-        A2UINodeType.CHECKBOX -> RenderCheckbox(node, onAction, nodeModifier)
-        A2UINodeType.SWITCH -> RenderSwitch(node, onAction, nodeModifier)
-        A2UINodeType.SLIDER -> RenderSlider(node, onAction, nodeModifier)
-        A2UINodeType.DROPDOWN -> RenderDropdown(node, onAction, nodeModifier)
-        
-        // Feedback
-        A2UINodeType.PROGRESS -> RenderProgress(node, nodeModifier)
-        A2UINodeType.LOADING -> RenderLoading(nodeModifier)
-        A2UINodeType.SNACKBAR -> { /* Handled at scaffold level */ }
-        
-        // Navigation
-        A2UINodeType.TOP_BAR -> RenderTopBar(node, onAction, nodeModifier)
-        A2UINodeType.BOTTOM_BAR -> RenderBottomBar(node, onAction, nodeModifier)
-        A2UINodeType.NAV_ITEM -> { /* Rendered by parent */ }
-        A2UINodeType.FAB -> RenderFab(node, onAction, nodeModifier)
-        
-        // Custom
-        A2UINodeType.CUSTOM -> RenderCustom(node, onAction, nodeModifier)
+        "Button" -> RenderButton(component, surface, resolver, onAction, modifier)
+        "TextField" -> RenderTextField(component, resolver, onAction, modifier)
+        "CheckBox" -> RenderCheckBox(component, resolver, onAction, modifier)
+        "ChoicePicker" -> RenderChoicePicker(component, resolver, onAction, modifier)
+        "Slider" -> RenderSlider(component, resolver, onAction, modifier)
+        "DateTimeInput" -> RenderDateTimeInput(component, resolver, onAction, modifier)
+
+        // Extension components (non-spec, PascalCase)
+        "Scaffold" -> RenderScaffold(component, surface, resolver, onAction, modifier)
+        "Box" -> RenderBox(component, surface, resolver, onAction, modifier)
+        "Scrollable" -> RenderScrollable(component, surface, resolver, onAction, modifier)
+        "LazyColumn" -> RenderLazyColumnExt(component, surface, resolver, onAction, modifier)
+        "LazyRow" -> RenderLazyRowExt(component, surface, resolver, onAction, modifier)
+        "Spacer" -> RenderSpacer(component, resolver, modifier)
+        "Switch" -> RenderSwitch(component, resolver, onAction, modifier)
+        "Dropdown" -> RenderDropdown(component, resolver, onAction, modifier)
+        "Progress" -> RenderProgress(component, resolver, modifier)
+        "Loading" -> RenderLoading(modifier)
+        "TopBar" -> RenderTopBar(component, resolver, modifier)
+        "BottomBar" -> RenderBottomBar(component, surface, resolver, onAction, modifier)
+        "Fab" -> RenderFab(component, resolver, onAction, modifier)
     }
 }
 
-// Layout Components
+// --- Helper: Resolve children and render ---
 
 @Composable
-private fun RenderColumn(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = node.props?.alignment.toHorizontalAlignment(),
-        verticalArrangement = node.props?.arrangement.toVerticalArrangement()
-    ) {
-        node.children?.forEach { child ->
-            RenderNode(child, onAction, Modifier.maybeWeight(child.props?.weight))
-        }
+private fun RenderChildren(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit
+) {
+    val childResolver = ChildListResolver(resolver)
+    val children = childResolver.resolve(component.children, surface.components)
+    for (child in children) {
+        val childResolver2 = if (child.scopedData != null) resolver.withScopedData(child.scopedData) else resolver
+        RenderComponent(child.componentId, surface, childResolver2, onAction)
     }
 }
 
-@Composable
-private fun RenderRow(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = node.props?.alignment.toVerticalAlignment(),
-        horizontalArrangement = node.props?.arrangement.toHorizontalArrangement()
-    ) {
-        node.children?.forEach { child ->
-            RenderNode(child, onAction, Modifier.maybeWeight(child.props?.weight))
-        }
-    }
-}
+// --- Content Components ---
 
 @Composable
-private fun RenderBox(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    Box(modifier = modifier) {
-        node.children?.forEach { child ->
-            RenderNode(child, onAction)
-        }
-    }
-}
+private fun RenderText(component: A2UIComponent, resolver: DynamicResolver, modifier: Modifier) {
+    val text = component.text(resolver) ?: ""
+    val variant = component.variant()
 
-@Composable
-private fun RenderCard(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    Card(
-        modifier = modifier,
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = (node.props?.elevation ?: 4).dp
-        ),
-        shape = RoundedCornerShape((node.props?.cornerRadius ?: 8).dp)
-    ) {
-        node.children?.forEach { child ->
-            RenderNode(child, onAction)
-        }
+    val (fontSize, fontWeight) = when (variant) {
+        "h1" -> 32.sp to FontWeight.Bold
+        "h2" -> 28.sp to FontWeight.Bold
+        "h3" -> 24.sp to FontWeight.Bold
+        "h4" -> 20.sp to FontWeight.SemiBold
+        "h5" -> 18.sp to FontWeight.SemiBold
+        "caption" -> 12.sp to FontWeight.Normal
+        "overline" -> 10.sp to FontWeight.Normal
+        else -> 16.sp to FontWeight.Normal // body
     }
-}
 
-@Composable
-private fun RenderScaffold(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    val topBar = node.children?.find { it.type == A2UINodeType.TOP_BAR }
-    val bottomBar = node.children?.find { it.type == A2UINodeType.BOTTOM_BAR }
-    val fab = node.children?.find { it.type == A2UINodeType.FAB }
-    val content = node.children?.filter { 
-        it.type != A2UINodeType.TOP_BAR && 
-        it.type != A2UINodeType.BOTTOM_BAR && 
-        it.type != A2UINodeType.FAB 
-    }
-    
-    Scaffold(
-        modifier = modifier,
-        topBar = { topBar?.let { RenderTopBar(it, onAction) } },
-        bottomBar = { bottomBar?.let { RenderBottomBar(it, onAction) } },
-        floatingActionButton = { fab?.let { RenderFab(it, onAction) } }
-    ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
-            content?.forEach { child ->
-                RenderNode(child, onAction)
-            }
-        }
-    }
-}
-
-@Composable
-private fun RenderScrollable(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    Column(
-        modifier = modifier.verticalScroll(rememberScrollState())
-    ) {
-        node.children?.forEach { child ->
-            RenderNode(child, onAction)
-        }
-    }
-}
-
-@Composable
-private fun RenderLazyColumn(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    LazyColumn(modifier = modifier) {
-        items(node.children ?: emptyList()) { child ->
-            RenderNode(child, onAction)
-        }
-    }
-}
-
-@Composable
-private fun RenderLazyRow(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    LazyRow(modifier = modifier) {
-        items(node.children ?: emptyList()) { child ->
-            RenderNode(child, onAction)
-        }
-    }
-}
-
-// Content Components
-
-@Composable
-private fun RenderText(node: A2UINode, modifier: Modifier) {
-    val style = node.props?.style
     Text(
-        text = node.props?.text ?: "",
+        text = text,
         modifier = modifier,
-        fontSize = (style?.size ?: 14).sp,
-        fontWeight = style?.weight.toFontWeight(),
-        color = style?.color?.toColor() ?: Color.Unspecified,
-        textAlign = style?.align.toTextAlign(),
-        maxLines = style?.maxLines ?: Int.MAX_VALUE,
-        overflow = style?.overflow.toTextOverflow()
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        color = Color.Unspecified
     )
 }
 
 @Composable
-private fun RenderImage(node: A2UINode, modifier: Modifier) {
-    // TODO: Implement async image loading with Coil or similar
+private fun RenderImage(component: A2UIComponent, resolver: DynamicResolver, modifier: Modifier) {
+    val url = component.url(resolver)
+    val alt = component.altText(resolver) ?: ""
+    val variant = component.variant()
+
+    val size = when (variant) {
+        "icon" -> 24.dp
+        "avatar" -> 48.dp
+        "smallFeature" -> 80.dp
+        "mediumFeature" -> 160.dp
+        "largeFeature" -> 240.dp
+        "header" -> 200.dp
+        else -> 120.dp
+    }
+
+    val shape = when (variant) {
+        "avatar" -> RoundedCornerShape(50)
+        else -> RoundedCornerShape(8.dp)
+    }
+
     Box(
         modifier = modifier
+            .size(size)
+            .clip(shape)
             .background(Color.Gray.copy(alpha = 0.3f)),
         contentAlignment = Alignment.Center
     ) {
-        Text("Image: ${node.props?.src ?: "?"}")
+        Text(
+            text = if (url != null) "IMG" else alt.take(3),
+            fontSize = 12.sp,
+            color = Color.Gray
+        )
     }
 }
 
 @Composable
-private fun RenderIcon(node: A2UINode, modifier: Modifier) {
-    // TODO: Map icon names to Material icons
-    Text(
-        text = "⬤", // Placeholder
-        modifier = modifier
-    )
+private fun RenderIcon(component: A2UIComponent, resolver: DynamicResolver, modifier: Modifier) {
+    val iconName = component.properties["icon"]?.jsonPrimitive?.contentOrNull
+        ?: component.text(resolver) ?: ""
+
+    val icon = mapNameToIcon(iconName)
+    if (icon != null) {
+        Icon(
+            imageVector = icon,
+            contentDescription = component.accessibility?.label ?: iconName,
+            modifier = modifier.size(24.dp)
+        )
+    } else {
+        Text(
+            text = iconName.take(3),
+            modifier = modifier,
+            fontSize = 14.sp
+        )
+    }
+}
+
+private fun mapNameToIcon(name: String): ImageVector? = when (name.lowercase()) {
+    "home" -> Icons.Default.Home
+    "search" -> Icons.Default.Search
+    "settings" -> Icons.Default.Settings
+    "person", "account" -> Icons.Default.Person
+    "favorite", "heart" -> Icons.Default.Favorite
+    "star" -> Icons.Default.Star
+    "add", "plus" -> Icons.Default.Add
+    "delete", "trash" -> Icons.Default.Delete
+    "edit", "pencil" -> Icons.Default.Edit
+    "close", "x" -> Icons.Default.Close
+    "check", "done" -> Icons.Default.Check
+    "info" -> Icons.Default.Info
+    "warning" -> Icons.Default.Warning
+    "error" -> Icons.Default.Warning
+    "email", "mail" -> Icons.Default.Email
+    "phone", "call" -> Icons.Default.Phone
+    "share" -> Icons.Default.Share
+    "menu" -> Icons.Default.Menu
+    "back", "arrowback" -> Icons.Default.ArrowBack
+    "forward", "arrowforward" -> Icons.Default.ArrowForward
+    "refresh" -> Icons.Default.Refresh
+    "lock" -> Icons.Default.Lock
+    "notification", "notifications" -> Icons.Default.Notifications
+    "calendar", "date" -> Icons.Default.DateRange
+    "location", "place" -> Icons.Default.LocationOn
+    "play" -> Icons.Default.PlayArrow
+    else -> null
 }
 
 @Composable
-private fun RenderSpacer(node: A2UINode, modifier: Modifier) {
-    Spacer(modifier = modifier)
-}
+private fun RenderVideo(component: A2UIComponent, resolver: DynamicResolver, modifier: Modifier) {
+    val url = component.url(resolver)
+    val desc = component.description(resolver) ?: "Video"
 
-// Input Components
-
-@Composable
-private fun RenderButton(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    val clickAction = node.actions?.find { it.event == A2UIEventType.CLICK }
-    
-    Button(
-        onClick = {
-            clickAction?.let {
-                onAction(A2UIActionEvent(node.id, it.handler, it.payload))
-            }
-        },
-        modifier = modifier,
-        enabled = node.props?.enabled ?: true
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Text(node.props?.text ?: "Button")
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .background(Color.Black.copy(alpha = 0.85f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = "Play",
+                    modifier = Modifier.size(48.dp),
+                    tint = Color.White
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(desc, color = Color.White, fontSize = 14.sp)
+                if (url != null) {
+                    Text(url, color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp)
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun RenderTextField(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    var text by remember { 
-        mutableStateOf(
-            (node.props?.value as? JsonPrimitive)?.contentOrNull ?: ""
-        ) 
+private fun RenderAudioPlayer(
+    component: A2UIComponent,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val url = component.url(resolver)
+    val desc = component.description(resolver) ?: "Audio"
+    var isPlaying by remember { mutableStateOf(false) }
+
+    Card(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            IconButton(onClick = { isPlaying = !isPlaying }) {
+                Icon(
+                    if (isPlaying) Icons.Default.Close else Icons.Default.PlayArrow,
+                    contentDescription = if (isPlaying) "Pause" else "Play"
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(desc, fontWeight = FontWeight.Medium)
+                if (url != null) {
+                    Text(url, fontSize = 12.sp, color = Color.Gray)
+                }
+            }
+        }
     }
-    val changeAction = node.actions?.find { it.event == A2UIEventType.CHANGE }
-    
+}
+
+// --- Layout Components ---
+
+@Composable
+private fun RenderRow(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = component.justify().toHorizontalArrangement(),
+        verticalAlignment = component.align().toVerticalAlignment()
+    ) {
+        val childResolver = ChildListResolver(resolver)
+        val children = childResolver.resolve(component.children, surface.components)
+        for (child in children) {
+            val childComponent = surface.components[child.componentId]
+            val childWeight = childComponent?.resolvedWeight(resolver)
+            val childMod = if (childWeight != null) Modifier.weight(childWeight) else Modifier
+            val cr = if (child.scopedData != null) resolver.withScopedData(child.scopedData) else resolver
+            RenderComponent(child.componentId, surface, cr, onAction, childMod)
+        }
+    }
+}
+
+@Composable
+private fun RenderColumn(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = component.justify().toVerticalArrangement(),
+        horizontalAlignment = component.align().toHorizontalAlignment()
+    ) {
+        val childResolver = ChildListResolver(resolver)
+        val children = childResolver.resolve(component.children, surface.components)
+        for (child in children) {
+            val childComponent = surface.components[child.componentId]
+            val childWeight = childComponent?.resolvedWeight(resolver)
+            val childMod = if (childWeight != null) Modifier.weight(childWeight) else Modifier
+            val cr = if (child.scopedData != null) resolver.withScopedData(child.scopedData) else resolver
+            RenderComponent(child.componentId, surface, cr, onAction, childMod)
+        }
+    }
+}
+
+@Composable
+private fun RenderCard(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    Card(
+        modifier = modifier,
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        val childId = component.childId()
+        if (childId != null) {
+            RenderComponent(childId, surface, resolver, onAction, Modifier.padding(16.dp))
+        } else {
+            Column(Modifier.padding(16.dp)) {
+                RenderChildren(component, surface, resolver, onAction)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenderList(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val direction = component.direction()
+    val childResolver = ChildListResolver(resolver)
+    val children = childResolver.resolve(component.children, surface.components)
+
+    if (direction == "horizontal") {
+        LazyRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(children) { child ->
+                val cr = if (child.scopedData != null) resolver.withScopedData(child.scopedData) else resolver
+                RenderComponent(child.componentId, surface, cr, onAction)
+            }
+        }
+    } else {
+        LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(children) { child ->
+                val cr = if (child.scopedData != null) resolver.withScopedData(child.scopedData) else resolver
+                RenderComponent(child.componentId, surface, cr, onAction)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenderTabs(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val tabs = component.tabs()
+    if (tabs.isEmpty()) return
+
+    var selectedTab by remember { mutableStateOf(0) }
+
+    Column(modifier = modifier) {
+        TabRow(selectedTabIndex = selectedTab) {
+            tabs.forEachIndexed { index, tab ->
+                Tab(
+                    selected = selectedTab == index,
+                    onClick = { selectedTab = index },
+                    text = { Text(tab.title) }
+                )
+            }
+        }
+        val currentTab = tabs.getOrNull(selectedTab)
+        if (currentTab != null) {
+            RenderComponent(currentTab.childId, surface, resolver, onAction)
+        }
+    }
+}
+
+@Composable
+private fun RenderModal(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val trigId = component.triggerId()
+    val contId = component.contentId()
+    var showDialog by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        // Render trigger
+        if (trigId != null) {
+            Box(Modifier.clickable { showDialog = true }) {
+                RenderComponent(trigId, surface, resolver, onAction)
+            }
+        }
+
+        // Show dialog content
+        if (showDialog && contId != null) {
+            AlertDialog(
+                onDismissRequest = { showDialog = false },
+                confirmButton = {
+                    TextButton(onClick = { showDialog = false }) {
+                        Text("Close")
+                    }
+                },
+                text = {
+                    RenderComponent(contId, surface, resolver, onAction)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun RenderDivider(component: A2UIComponent, modifier: Modifier) {
+    val axis = component.axis()
+    if (axis == "vertical") {
+        VerticalDivider(modifier = modifier)
+    } else {
+        HorizontalDivider(modifier = modifier)
+    }
+}
+
+// --- Input Components ---
+
+@Composable
+private fun RenderButton(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val action = component.action()
+    val variant = component.variant()
+    val enabled = component.isEnabled(resolver)
+
+    val onClick: () -> Unit = {
+        if (action != null) {
+            if (action.name != null) {
+                onAction(
+                    A2UIActionEvent(
+                        componentId = component.id,
+                        actionName = action.name,
+                        context = action.context
+                    )
+                )
+            }
+        }
+    }
+
+    when (variant) {
+        "borderless" -> {
+            TextButton(onClick = onClick, modifier = modifier, enabled = enabled) {
+                val childId = component.childId()
+                if (childId != null) {
+                    RenderComponent(childId, surface, resolver, onAction)
+                } else {
+                    Text(component.text(resolver) ?: "Button")
+                }
+            }
+        }
+        else -> {
+            Button(onClick = onClick, modifier = modifier, enabled = enabled) {
+                val childId = component.childId()
+                if (childId != null) {
+                    RenderComponent(childId, surface, resolver, onAction)
+                } else {
+                    Text(component.text(resolver) ?: "Button")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenderTextField(
+    component: A2UIComponent,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val initialValue = resolver.resolveString(component.properties["value"]) ?: ""
+    var text by remember { mutableStateOf(initialValue) }
+    val label = component.label(resolver)
+    val placeholder = component.placeholder(resolver)
+    val enabled = component.isEnabled(resolver)
+    val variant = component.variant()
+    val action = component.action()
+
+    val validationEngine = remember(resolver) { ValidationEngine(resolver) }
+    val validation = validationEngine.validate(component.checks)
+
+    val maxLines = when (variant) {
+        "longText" -> 5
+        else -> 1
+    }
+
     OutlinedTextField(
         value = text,
         onValueChange = { newValue ->
             text = newValue
-            changeAction?.let {
-                onAction(A2UIActionEvent(node.id, it.handler, JsonPrimitive(newValue)))
+            if (action?.name != null) {
+                onAction(
+                    A2UIActionEvent(
+                        componentId = component.id,
+                        actionName = action.name,
+                        value = JsonPrimitive(newValue)
+                    )
+                )
             }
         },
-        modifier = modifier,
-        label = node.props?.label?.let { { Text(it) } },
-        placeholder = node.props?.hint?.let { { Text(it) } },
-        enabled = node.props?.enabled ?: true,
-        maxLines = node.props?.maxLines ?: 1
+        modifier = modifier.fillMaxWidth(),
+        label = label?.let { { Text(it) } },
+        placeholder = placeholder?.let { { Text(it) } },
+        enabled = enabled,
+        maxLines = maxLines,
+        isError = !validation.isValid,
+        supportingText = if (!validation.isValid) {
+            { Text(validation.errors.first(), color = MaterialTheme.colorScheme.error) }
+        } else null,
+        singleLine = variant != "longText"
     )
 }
 
 @Composable
-private fun RenderCheckbox(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    var checked by remember { 
-        mutableStateOf(
-            (node.props?.value as? JsonPrimitive)?.booleanOrNull ?: node.props?.checked ?: false
-        ) 
-    }
-    val changeAction = node.actions?.find { it.event == A2UIEventType.CHANGE }
-    
+private fun RenderCheckBox(
+    component: A2UIComponent,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val initialValue = resolver.resolveBoolean(component.properties["value"]) ?: false
+    var checked by remember { mutableStateOf(initialValue) }
+    val label = component.label(resolver)
+    val enabled = component.isEnabled(resolver)
+    val action = component.action()
+
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically
@@ -303,80 +603,382 @@ private fun RenderCheckbox(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, 
             checked = checked,
             onCheckedChange = { newValue ->
                 checked = newValue
-                changeAction?.let {
-                    onAction(A2UIActionEvent(node.id, it.handler, JsonPrimitive(newValue)))
+                if (action?.name != null) {
+                    onAction(
+                        A2UIActionEvent(
+                            componentId = component.id,
+                            actionName = action.name,
+                            value = JsonPrimitive(newValue)
+                        )
+                    )
                 }
             },
-            enabled = node.props?.enabled ?: true
+            enabled = enabled
         )
-        node.props?.label?.let { Text(it) }
+        if (label != null) {
+            Text(label, modifier = Modifier.padding(start = 8.dp))
+        }
     }
 }
 
 @Composable
-private fun RenderSwitch(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    var checked by remember { 
-        mutableStateOf(
-            (node.props?.value as? JsonPrimitive)?.booleanOrNull ?: node.props?.checked ?: false
+private fun RenderChoicePicker(
+    component: A2UIComponent,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val options = component.options(resolver)
+    val selectionMode = component.selectionMode()
+    val label = component.label(resolver)
+    val action = component.action()
+
+    val initialValue = resolver.resolveString(component.properties["value"]) ?: ""
+    var selectedValue by remember { mutableStateOf(initialValue) }
+
+    val initialMulti = resolver.resolveStringList(component.properties["value"]) ?: emptyList()
+    var selectedValues by remember { mutableStateOf(initialMulti.toSet()) }
+
+    Column(modifier = modifier) {
+        if (label != null) {
+            Text(label, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 8.dp))
+        }
+
+        if (selectionMode == "multipleSelection") {
+            options.forEach { option ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            selectedValues = if (option.value in selectedValues)
+                                selectedValues - option.value
+                            else
+                                selectedValues + option.value
+                            if (action?.name != null) {
+                                onAction(
+                                    A2UIActionEvent(
+                                        componentId = component.id,
+                                        actionName = action.name,
+                                        value = JsonArray(selectedValues.map { JsonPrimitive(it) })
+                                    )
+                                )
+                            }
+                        }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = option.value in selectedValues,
+                        onCheckedChange = null
+                    )
+                    Text(option.label, modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        } else {
+            // mutuallyExclusive (radio)
+            options.forEach { option ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = option.value == selectedValue,
+                            onClick = {
+                                selectedValue = option.value
+                                if (action?.name != null) {
+                                    onAction(
+                                        A2UIActionEvent(
+                                            componentId = component.id,
+                                            actionName = action.name,
+                                            value = JsonPrimitive(option.value)
+                                        )
+                                    )
+                                }
+                            }
+                        )
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = option.value == selectedValue,
+                        onClick = null
+                    )
+                    Text(option.label, modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenderSlider(
+    component: A2UIComponent,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val min = component.min(resolver)
+    val max = component.max(resolver)
+    val initialValue = resolver.resolveFloat(component.properties["value"]) ?: min
+    var value by remember { mutableStateOf(initialValue) }
+    val label = component.label(resolver)
+    val enabled = component.isEnabled(resolver)
+    val action = component.action()
+
+    Column(modifier = modifier) {
+        if (label != null) {
+            Text(label, modifier = Modifier.padding(bottom = 4.dp))
+        }
+        Slider(
+            value = value,
+            onValueChange = { newValue ->
+                value = newValue
+                if (action?.name != null) {
+                    onAction(
+                        A2UIActionEvent(
+                            componentId = component.id,
+                            actionName = action.name,
+                            value = JsonPrimitive(newValue)
+                        )
+                    )
+                }
+            },
+            valueRange = min..max,
+            enabled = enabled
         )
     }
-    val changeAction = node.actions?.find { it.event == A2UIEventType.CHANGE }
-    
+}
+
+@Composable
+private fun RenderDateTimeInput(
+    component: A2UIComponent,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val label = component.label(resolver)
+    val initialValue = resolver.resolveString(component.properties["value"]) ?: ""
+    var text by remember { mutableStateOf(initialValue) }
+    val enabled = component.isEnabled(resolver)
+    val action = component.action()
+    val enableDate = component.enableDate()
+    val enableTime = component.enableTime()
+
+    val hint = when {
+        enableDate && enableTime -> "YYYY-MM-DD HH:MM"
+        enableTime -> "HH:MM"
+        else -> "YYYY-MM-DD"
+    }
+
+    OutlinedTextField(
+        value = text,
+        onValueChange = { newValue ->
+            text = newValue
+            if (action?.name != null) {
+                onAction(
+                    A2UIActionEvent(
+                        componentId = component.id,
+                        actionName = action.name,
+                        value = JsonPrimitive(newValue)
+                    )
+                )
+            }
+        },
+        modifier = modifier.fillMaxWidth(),
+        label = label?.let { { Text(it) } },
+        placeholder = { Text(hint) },
+        enabled = enabled,
+        singleLine = true,
+        trailingIcon = {
+            Icon(Icons.Default.DateRange, contentDescription = "Date/Time")
+        }
+    )
+}
+
+// --- Extension Components ---
+
+@Composable
+private fun RenderScaffold(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    // Look for TopBar, BottomBar, Fab children
+    val childResolver = ChildListResolver(resolver)
+    val children = childResolver.resolve(component.children, surface.components)
+
+    val topBarChild = children.firstOrNull { id ->
+        surface.components[id.componentId]?.component == "TopBar"
+    }
+    val bottomBarChild = children.firstOrNull { id ->
+        surface.components[id.componentId]?.component == "BottomBar"
+    }
+    val fabChild = children.firstOrNull { id ->
+        surface.components[id.componentId]?.component == "Fab"
+    }
+    val content = children.filter { id ->
+        val comp = surface.components[id.componentId]?.component
+        comp != "TopBar" && comp != "BottomBar" && comp != "Fab"
+    }
+
+    Scaffold(
+        modifier = modifier,
+        topBar = {
+            topBarChild?.let { child ->
+                RenderComponent(child.componentId, surface, resolver, onAction)
+            }
+        },
+        bottomBar = {
+            bottomBarChild?.let { child ->
+                RenderComponent(child.componentId, surface, resolver, onAction)
+            }
+        },
+        floatingActionButton = {
+            fabChild?.let { child ->
+                RenderComponent(child.componentId, surface, resolver, onAction)
+            }
+        }
+    ) { padding ->
+        Column(modifier = Modifier.padding(padding)) {
+            for (child in content) {
+                RenderComponent(child.componentId, surface, resolver, onAction)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenderBox(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    Box(modifier = modifier) {
+        RenderChildren(component, surface, resolver, onAction)
+    }
+}
+
+@Composable
+private fun RenderScrollable(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    Column(modifier = modifier.verticalScroll(rememberScrollState())) {
+        RenderChildren(component, surface, resolver, onAction)
+    }
+}
+
+@Composable
+private fun RenderLazyColumnExt(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val childResolver = ChildListResolver(resolver)
+    val children = childResolver.resolve(component.children, surface.components)
+
+    LazyColumn(modifier = modifier) {
+        items(children) { child ->
+            val cr = if (child.scopedData != null) resolver.withScopedData(child.scopedData) else resolver
+            RenderComponent(child.componentId, surface, cr, onAction)
+        }
+    }
+}
+
+@Composable
+private fun RenderLazyRowExt(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val childResolver = ChildListResolver(resolver)
+    val children = childResolver.resolve(component.children, surface.components)
+
+    LazyRow(modifier = modifier) {
+        items(children) { child ->
+            val cr = if (child.scopedData != null) resolver.withScopedData(child.scopedData) else resolver
+            RenderComponent(child.componentId, surface, cr, onAction)
+        }
+    }
+}
+
+@Composable
+private fun RenderSpacer(component: A2UIComponent, resolver: DynamicResolver, modifier: Modifier) {
+    val height = resolver.resolveFloat(component.properties["height"])
+    val width = resolver.resolveFloat(component.properties["width"])
+    var mod = modifier
+    if (height != null) mod = mod.height(height.dp)
+    if (width != null) mod = mod.width(width.dp)
+    Spacer(modifier = mod)
+}
+
+@Composable
+private fun RenderSwitch(
+    component: A2UIComponent,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val initialValue = resolver.resolveBoolean(component.properties["value"]) ?: false
+    var checked by remember { mutableStateOf(initialValue) }
+    val label = component.label(resolver)
+    val enabled = component.isEnabled(resolver)
+    val action = component.action()
+
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        node.props?.label?.let { 
-            Text(it, modifier = Modifier.weight(1f)) 
+        if (label != null) {
+            Text(label, modifier = Modifier.weight(1f))
         }
         Switch(
             checked = checked,
             onCheckedChange = { newValue ->
                 checked = newValue
-                changeAction?.let {
-                    onAction(A2UIActionEvent(node.id, it.handler, JsonPrimitive(newValue)))
+                if (action?.name != null) {
+                    onAction(
+                        A2UIActionEvent(
+                            componentId = component.id,
+                            actionName = action.name,
+                            value = JsonPrimitive(newValue)
+                        )
+                    )
                 }
             },
-            enabled = node.props?.enabled ?: true
+            enabled = enabled
         )
     }
 }
 
 @Composable
-private fun RenderSlider(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    var value by remember { 
-        mutableStateOf(node.props?.progress ?: 0f) 
-    }
-    val changeAction = node.actions?.find { it.event == A2UIEventType.CHANGE }
-    
-    Slider(
-        value = value,
-        onValueChange = { newValue ->
-            value = newValue
-            changeAction?.let {
-                onAction(A2UIActionEvent(node.id, it.handler, JsonPrimitive(newValue)))
-            }
-        },
-        modifier = modifier,
-        enabled = node.props?.enabled ?: true
-    )
-}
-
-@Composable
-private fun RenderDropdown(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
+private fun RenderDropdown(
+    component: A2UIComponent,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val options = component.options(resolver)
+    val initialValue = resolver.resolveString(component.properties["value"]) ?: ""
+    var selectedOption by remember { mutableStateOf(initialValue) }
     var expanded by remember { mutableStateOf(false) }
-    var selectedOption by remember { 
-        mutableStateOf(
-            (node.props?.value as? JsonPrimitive)?.contentOrNull ?: ""
-        )
-    }
-    val changeAction = node.actions?.find { it.event == A2UIEventType.CHANGE }
-    
+    val action = component.action()
+
     Box(modifier = modifier) {
         OutlinedButton(onClick = { expanded = true }) {
             Text(
-                node.props?.options?.find { it.value == selectedOption }?.label 
-                    ?: node.props?.hint 
+                options.find { it.value == selectedOption }?.label
+                    ?: component.placeholder(resolver)
                     ?: "Select..."
             )
         }
@@ -384,14 +986,20 @@ private fun RenderDropdown(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, 
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            node.props?.options?.forEach { option ->
+            options.forEach { option ->
                 DropdownMenuItem(
                     text = { Text(option.label) },
                     onClick = {
                         selectedOption = option.value
                         expanded = false
-                        changeAction?.let {
-                            onAction(A2UIActionEvent(node.id, it.handler, JsonPrimitive(option.value)))
+                        if (action?.name != null) {
+                            onAction(
+                                A2UIActionEvent(
+                                    componentId = component.id,
+                                    actionName = action.name,
+                                    value = JsonPrimitive(option.value)
+                                )
+                            )
                         }
                     }
                 )
@@ -400,54 +1008,59 @@ private fun RenderDropdown(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, 
     }
 }
 
-// Feedback Components
-
 @Composable
-private fun RenderProgress(node: A2UINode, modifier: Modifier) {
-    val progress = node.props?.progress
+private fun RenderProgress(component: A2UIComponent, resolver: DynamicResolver, modifier: Modifier) {
+    val progress = resolver.resolveFloat(component.properties["progress"])
     if (progress != null) {
-        LinearProgressIndicator(
-            progress = { progress },
-            modifier = modifier
-        )
+        LinearProgressIndicator(progress = { progress }, modifier = modifier.fillMaxWidth())
     } else {
-        LinearProgressIndicator(modifier = modifier)
+        LinearProgressIndicator(modifier = modifier.fillMaxWidth())
     }
 }
 
 @Composable
 private fun RenderLoading(modifier: Modifier) {
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
     }
 }
 
-// Navigation Components
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RenderTopBar(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier = Modifier) {
+private fun RenderTopBar(component: A2UIComponent, resolver: DynamicResolver, modifier: Modifier) {
     TopAppBar(
-        title = { Text(node.props?.text ?: "") },
+        title = { Text(component.text(resolver) ?: "") },
         modifier = modifier
     )
 }
 
 @Composable
-private fun RenderBottomBar(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier = Modifier) {
+private fun RenderBottomBar(
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
     NavigationBar(modifier = modifier) {
-        node.children?.forEach { navItem ->
-            val clickAction = navItem.actions?.find { it.event == A2UIEventType.CLICK }
+        val childResolver = ChildListResolver(resolver)
+        val children = childResolver.resolve(component.children, surface.components)
+        children.forEach { child ->
+            val navComponent = surface.components[child.componentId] ?: return@forEach
+            val action = navComponent.action()
             NavigationBarItem(
-                icon = { Text("•") }, // TODO: Icon mapping
-                label = { Text(navItem.props?.label ?: "") },
-                selected = navItem.props?.checked ?: false,
+                icon = { Text("\u2022") },
+                label = { Text(navComponent.label(resolver) ?: "") },
+                selected = resolver.resolveBoolean(navComponent.properties["selected"]) ?: false,
                 onClick = {
-                    clickAction?.let {
-                        onAction(A2UIActionEvent(navItem.id, it.handler, it.payload))
+                    if (action?.name != null) {
+                        onAction(
+                            A2UIActionEvent(
+                                componentId = navComponent.id,
+                                actionName = action.name,
+                                context = action.context
+                            )
+                        )
                     }
                 }
             )
@@ -456,184 +1069,64 @@ private fun RenderBottomBar(node: A2UINode, onAction: (A2UIActionEvent) -> Unit,
 }
 
 @Composable
-private fun RenderFab(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier = Modifier) {
-    val clickAction = node.actions?.find { it.event == A2UIEventType.CLICK }
-    
+private fun RenderFab(
+    component: A2UIComponent,
+    resolver: DynamicResolver,
+    onAction: (A2UIActionEvent) -> Unit,
+    modifier: Modifier
+) {
+    val action = component.action()
     FloatingActionButton(
         onClick = {
-            clickAction?.let {
-                onAction(A2UIActionEvent(node.id, it.handler, it.payload))
+            if (action?.name != null) {
+                onAction(
+                    A2UIActionEvent(
+                        componentId = component.id,
+                        actionName = action.name,
+                        context = action.context
+                    )
+                )
             }
         },
         modifier = modifier
     ) {
-        Text(node.props?.icon ?: "+")
+        val icon = component.properties["icon"]?.jsonPrimitive?.contentOrNull
+        Text(icon ?: "+")
     }
 }
 
-// Custom Component
+// --- Arrangement/Alignment Helpers ---
 
-@Composable
-private fun RenderCustom(node: A2UINode, onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) {
-    // Placeholder for custom component rendering
-    Box(
-        modifier = modifier
-            .background(Color.LightGray.copy(alpha = 0.3f))
-            .padding(8.dp)
-    ) {
-        Text("Custom: ${node.id ?: "unknown"}")
-    }
-}
-
-// Action Event
-
-data class A2UIActionEvent(
-    val nodeId: String?,
-    val handler: String,
-    val payload: kotlinx.serialization.json.JsonElement?
-)
-
-// Extension Functions
-
-private fun Modifier.applyProps(props: A2UIProps?): Modifier {
-    if (props == null) return this
-    
-    var mod = this
-    
-    // Dimensions
-    props.width?.let { dim ->
-        mod = when (dim.type) {
-            A2UIDimensionType.FILL -> mod.fillMaxWidth()
-            A2UIDimensionType.WRAP -> mod
-            A2UIDimensionType.DP -> dim.value?.let { mod.width(it.dp) } ?: mod
-        }
-    }
-    
-    props.height?.let { dim ->
-        mod = when (dim.type) {
-            A2UIDimensionType.FILL -> mod.fillMaxHeight()
-            A2UIDimensionType.WRAP -> mod
-            A2UIDimensionType.DP -> dim.value?.let { mod.height(it.dp) } ?: mod
-        }
-    }
-    
-    // Padding
-    props.padding?.let { p ->
-        mod = when {
-            p.all != null -> mod.padding(p.all.dp)
-            p.horizontal != null || p.vertical != null -> 
-                mod.padding(horizontal = (p.horizontal ?: 0).dp, vertical = (p.vertical ?: 0).dp)
-            else -> mod.padding(
-                start = (p.start ?: 0).dp,
-                end = (p.end ?: 0).dp,
-                top = (p.top ?: 0).dp,
-                bottom = (p.bottom ?: 0).dp
-            )
-        }
-    }
-    
-    // Background
-    props.background?.let { bg ->
-        mod = mod.background(bg.toColor())
-    }
-    
-    // Corner radius
-    props.cornerRadius?.let { radius ->
-        mod = mod.clip(RoundedCornerShape(radius.dp))
-    }
-    
-    return mod
-}
-
-private fun Modifier.applyActions(node: A2UINode, onAction: (A2UIActionEvent) -> Unit): Modifier {
-    val clickAction = node.actions?.find { it.event == A2UIEventType.CLICK }
-    
-    return if (clickAction != null && node.type !in listOf(
-        A2UINodeType.BUTTON, 
-        A2UINodeType.CHECKBOX, 
-        A2UINodeType.SWITCH,
-        A2UINodeType.FAB,
-        A2UINodeType.NAV_ITEM
-    )) {
-        this.clickable { 
-            onAction(A2UIActionEvent(node.id, clickAction.handler, clickAction.payload))
-        }
-    } else {
-        this
-    }
-}
-
-@Composable
-private fun RowScope.Modifier.maybeWeight(weight: Float?): Modifier {
-    return if (weight != null) this.weight(weight) else this
-}
-
-@Composable
-private fun ColumnScope.Modifier.maybeWeight(weight: Float?): Modifier {
-    return if (weight != null) this.weight(weight) else this
-}
-
-private fun String.toColor(): Color {
-    return try {
-        Color(android.graphics.Color.parseColor(if (startsWith("#")) this else "#$this"))
-    } catch (e: Exception) {
-        Color.Unspecified
-    }
-}
-
-private fun A2UIAlignment?.toHorizontalAlignment(): Alignment.Horizontal = when (this) {
-    A2UIAlignment.START -> Alignment.Start
-    A2UIAlignment.CENTER, A2UIAlignment.CENTER_HORIZONTAL -> Alignment.CenterHorizontally
-    A2UIAlignment.END -> Alignment.End
-    else -> Alignment.Start
-}
-
-private fun A2UIAlignment?.toVerticalAlignment(): Alignment.Vertical = when (this) {
-    A2UIAlignment.TOP -> Alignment.Top
-    A2UIAlignment.CENTER, A2UIAlignment.CENTER_VERTICAL -> Alignment.CenterVertically
-    A2UIAlignment.BOTTOM -> Alignment.Bottom
-    else -> Alignment.Top
-}
-
-private fun A2UIArrangement?.toVerticalArrangement(): Arrangement.Vertical = when (this) {
-    A2UIArrangement.START -> Arrangement.Top
-    A2UIArrangement.CENTER -> Arrangement.Center
-    A2UIArrangement.END -> Arrangement.Bottom
-    A2UIArrangement.SPACE_BETWEEN -> Arrangement.SpaceBetween
-    A2UIArrangement.SPACE_AROUND -> Arrangement.SpaceAround
-    A2UIArrangement.SPACE_EVENLY -> Arrangement.SpaceEvenly
-    else -> Arrangement.Top
-}
-
-private fun A2UIArrangement?.toHorizontalArrangement(): Arrangement.Horizontal = when (this) {
-    A2UIArrangement.START -> Arrangement.Start
-    A2UIArrangement.CENTER -> Arrangement.Center
-    A2UIArrangement.END -> Arrangement.End
-    A2UIArrangement.SPACE_BETWEEN -> Arrangement.SpaceBetween
-    A2UIArrangement.SPACE_AROUND -> Arrangement.SpaceAround
-    A2UIArrangement.SPACE_EVENLY -> Arrangement.SpaceEvenly
+private fun String?.toHorizontalArrangement(): Arrangement.Horizontal = when (this) {
+    "start" -> Arrangement.Start
+    "center" -> Arrangement.Center
+    "end" -> Arrangement.End
+    "spaceBetween" -> Arrangement.SpaceBetween
+    "spaceAround" -> Arrangement.SpaceAround
+    "spaceEvenly" -> Arrangement.SpaceEvenly
     else -> Arrangement.Start
 }
 
-private fun A2UIFontWeight?.toFontWeight(): FontWeight = when (this) {
-    A2UIFontWeight.THIN -> FontWeight.Thin
-    A2UIFontWeight.LIGHT -> FontWeight.Light
-    A2UIFontWeight.NORMAL -> FontWeight.Normal
-    A2UIFontWeight.MEDIUM -> FontWeight.Medium
-    A2UIFontWeight.SEMIBOLD -> FontWeight.SemiBold
-    A2UIFontWeight.BOLD -> FontWeight.Bold
-    else -> FontWeight.Normal
+private fun String?.toVerticalArrangement(): Arrangement.Vertical = when (this) {
+    "start" -> Arrangement.Top
+    "center" -> Arrangement.Center
+    "end" -> Arrangement.Bottom
+    "spaceBetween" -> Arrangement.SpaceBetween
+    "spaceAround" -> Arrangement.SpaceAround
+    "spaceEvenly" -> Arrangement.SpaceEvenly
+    else -> Arrangement.Top
 }
 
-private fun A2UITextAlign?.toTextAlign(): TextAlign = when (this) {
-    A2UITextAlign.START -> TextAlign.Start
-    A2UITextAlign.CENTER -> TextAlign.Center
-    A2UITextAlign.END -> TextAlign.End
-    else -> TextAlign.Start
+private fun String?.toHorizontalAlignment(): Alignment.Horizontal = when (this) {
+    "start" -> Alignment.Start
+    "center" -> Alignment.CenterHorizontally
+    "end" -> Alignment.End
+    else -> Alignment.Start
 }
 
-private fun A2UITextOverflow?.toTextOverflow(): TextOverflow = when (this) {
-    A2UITextOverflow.CLIP -> TextOverflow.Clip
-    A2UITextOverflow.ELLIPSIS -> TextOverflow.Ellipsis
-    else -> TextOverflow.Clip
+private fun String?.toVerticalAlignment(): Alignment.Vertical = when (this) {
+    "start" -> Alignment.Top
+    "center" -> Alignment.CenterVertically
+    "end" -> Alignment.Bottom
+    else -> Alignment.Top
 }

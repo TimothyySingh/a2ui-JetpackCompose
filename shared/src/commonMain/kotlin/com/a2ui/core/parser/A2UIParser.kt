@@ -1,41 +1,34 @@
 package com.a2ui.core.parser
 
-import com.a2ui.core.model.A2UIDocument
-import com.a2ui.core.model.A2UINode
+import com.a2ui.core.model.A2UIComponent
+import com.a2ui.core.model.A2UISurface
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 /**
- * A2UI Parser - Parses JSON/JSONL into A2UI documents
+ * A2UI v0.9 Parser - Parses JSON into A2UISurface documents.
  */
 object A2UIParser {
-    
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
         coerceInputValues = true
     }
-    
+
     /**
-     * Parse a full A2UI document from JSON
+     * Parse a full A2UISurface document from JSON.
      */
-    fun parseDocument(jsonString: String): Result<A2UIDocument> {
+    fun parseDocument(jsonString: String): Result<A2UISurface> {
         return runCatching {
-            json.decodeFromString<A2UIDocument>(jsonString)
+            json.decodeFromString<A2UISurface>(jsonString)
         }
     }
-    
+
     /**
-     * Parse a single A2UI node from JSON
-     */
-    fun parseNode(jsonString: String): Result<A2UINode> {
-        return runCatching {
-            json.decodeFromString<A2UINode>(jsonString)
-        }
-    }
-    
-    /**
-     * Parse JSONL format (newline-delimited JSON)
-     * Each line represents a node update or command
+     * Parse JSONL format (newline-delimited JSON).
+     * Each line represents a command for incremental updates.
      */
     fun parseJsonl(jsonlString: String): List<A2UICommand> {
         return jsonlString
@@ -47,31 +40,26 @@ object A2UIParser {
                 }.getOrNull()
             }
     }
-    
-    /**
-     * Create a minimal document wrapping a single node
-     */
-    fun wrapNode(node: A2UINode): A2UIDocument {
-        return A2UIDocument(root = node)
-    }
 }
 
 /**
- * A2UI Command - For incremental updates via JSONL
+ * A2UI Command - For incremental updates via JSONL.
+ * Operates on the flat component map.
  */
-@kotlinx.serialization.Serializable
+@Serializable
 data class A2UICommand(
     val op: A2UIOperation,
-    val target: String? = null,  // Node ID to target
-    val node: A2UINode? = null,   // Node data for add/replace
-    val props: com.a2ui.core.model.A2UIProps? = null  // Props for update
+    val target: String? = null,
+    val component: A2UIComponent? = null,
+    val data: JsonObject? = null
 )
 
-@kotlinx.serialization.Serializable
+@Serializable
 enum class A2UIOperation {
-    @kotlinx.serialization.SerialName("replace") REPLACE,  // Replace entire tree
-    @kotlinx.serialization.SerialName("add") ADD,          // Add child to target
-    @kotlinx.serialization.SerialName("remove") REMOVE,    // Remove target node
-    @kotlinx.serialization.SerialName("update") UPDATE,    // Update target props
-    @kotlinx.serialization.SerialName("clear") CLEAR       // Clear all children of target
+    @kotlinx.serialization.SerialName("replace") REPLACE,
+    @kotlinx.serialization.SerialName("add") ADD,
+    @kotlinx.serialization.SerialName("remove") REMOVE,
+    @kotlinx.serialization.SerialName("update") UPDATE,
+    @kotlinx.serialization.SerialName("setData") SET_DATA,
+    @kotlinx.serialization.SerialName("clear") CLEAR
 }

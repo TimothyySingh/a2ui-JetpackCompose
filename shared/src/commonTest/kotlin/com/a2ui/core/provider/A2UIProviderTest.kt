@@ -1,221 +1,186 @@
 package com.a2ui.core.provider
 
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.*
-import com.a2ui.core.model.A2UINode
+import com.a2ui.core.model.A2UIComponent
+import com.a2ui.core.model.A2UISurface
 import com.a2ui.core.registry.ComponentRegistry
-import com.a2ui.core.render.A2UIActionEvent
 import com.a2ui.core.theme.A2UITheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
- * Test suite for A2UIProvider
- * Note: These are conceptual tests that would need a proper Compose testing environment
+ * Test suite for A2UIProvider - v0.9
+ *
+ * These are conceptual tests (no ComposeTestRule). They verify the
+ * A2UIConfig data class, default values, and ComponentRegistry basic
+ * operations in a provider-like context using A2UISurface types.
  */
 class A2UIProviderTest {
-    
+
+    // ------------------------------------------------------------------
+    // A2UIConfig data class
+    // ------------------------------------------------------------------
+
     @Test
-    fun testProviderProvidesRegistry() {
-        // This test demonstrates the concept - actual implementation would need compose test rule
-        // Given
+    fun testConfigDataClassDefaults() {
+        val config = A2UIConfig()
+
+        assertNotNull(config.componentRegistry)
+        assertEquals(A2UITheme.Default, config.theme)
+        assertFalse(config.debug)
+    }
+
+    @Test
+    fun testConfigDataClassCustomValues() {
         val customRegistry = ComponentRegistry().apply {
-            register("TEST") { _, _, _ -> }
+            register("Button") { _, _, _, _, _ -> }
         }
-        
-        // The provider should make the registry available via CompositionLocal
-        // In a real test with ComposeTestRule:
-        /*
-        composeTestRule.setContent {
-            A2UIProvider(componentRegistry = customRegistry) {
-                val registry = useComponentRegistry()
-                assertTrue(registry.has("TEST"))
-            }
-        }
-        */
-    }
-    
-    @Test
-    fun testProviderProvidesTheme() {
-        // Given
         val customTheme = A2UITheme.Dark
-        
-        // The provider should make the theme available via CompositionLocal
-        // In a real test with ComposeTestRule:
-        /*
-        composeTestRule.setContent {
-            A2UIProvider(theme = customTheme) {
-                val theme = useA2UITheme()
-                assertEquals(A2UITheme.Dark, theme)
-            }
-        }
-        */
-    }
-    
-    @Test
-    fun testProviderWithConfig() {
-        // Given
+
         val config = A2UIConfig(
-            componentRegistry = ComponentRegistry().apply {
-                register("CUSTOM") { _, _, _ -> }
-            },
-            theme = A2UITheme.HighContrast,
-            debug = true
-        )
-        
-        // The provider should accept a config object
-        // In a real test with ComposeTestRule:
-        /*
-        composeTestRule.setContent {
-            A2UIProvider(config = config) {
-                val registry = useComponentRegistry()
-                val theme = useA2UITheme()
-                assertTrue(registry.has("CUSTOM"))
-                assertEquals(A2UITheme.HighContrast, theme)
-            }
-        }
-        */
-    }
-    
-    @Test
-    fun testNestedProviders() {
-        // Test that nested providers override parent values
-        // Given
-        val parentRegistry = ComponentRegistry().apply {
-            register("PARENT") { _, _, _ -> }
-        }
-        val childRegistry = ComponentRegistry().apply {
-            register("CHILD") { _, _, _ -> }
-        }
-        
-        // In a real test with ComposeTestRule:
-        /*
-        composeTestRule.setContent {
-            A2UIProvider(componentRegistry = parentRegistry) {
-                // Parent context
-                val registry1 = useComponentRegistry()
-                assertTrue(registry1.has("PARENT"))
-                assertFalse(registry1.has("CHILD"))
-                
-                A2UIProvider(componentRegistry = childRegistry) {
-                    // Child context - should have child registry
-                    val registry2 = useComponentRegistry()
-                    assertFalse(registry2.has("PARENT"))
-                    assertTrue(registry2.has("CHILD"))
-                }
-            }
-        }
-        */
-    }
-    
-    @Test
-    fun testDefaultValues() {
-        // Test that provider has sensible defaults when no parameters provided
-        // In a real test with ComposeTestRule:
-        /*
-        composeTestRule.setContent {
-            A2UIProvider {
-                val registry = useComponentRegistry()
-                val theme = useA2UITheme()
-                
-                assertNotNull(registry)
-                assertEquals(A2UITheme.Default, theme)
-            }
-        }
-        */
-    }
-    
-    @Test
-    fun testConfigDataClass() {
-        // Test the A2UIConfig data class
-        val config1 = A2UIConfig()
-        assertEquals(ComponentRegistry().javaClass, config1.componentRegistry.javaClass)
-        assertEquals(A2UITheme.Default, config1.theme)
-        assertEquals(false, config1.debug)
-        
-        val customRegistry = ComponentRegistry()
-        val customTheme = A2UITheme.Dark
-        val config2 = A2UIConfig(
             componentRegistry = customRegistry,
             theme = customTheme,
             debug = true
         )
-        assertEquals(customRegistry, config2.componentRegistry)
-        assertEquals(customTheme, config2.theme)
-        assertEquals(true, config2.debug)
-    }
-}
 
-/**
- * Mock test utilities for compose testing
- * In a real project, these would use actual compose test APIs
- */
-object MockComposeTestUtils {
-    
-    /**
-     * Mock test for verifying component registration works in UI
-     */
-    fun testCustomComponentIsRendered() {
-        // In a real test:
-        /*
-        @get:Rule
-        val composeTestRule = createComposeRule()
-        
-        @Test
-        fun testCustomButtonIsRendered() {
-            var customButtonRendered = false
-            
-            val registry = ComponentRegistry().apply {
-                register("BUTTON") { node, onAction, modifier ->
-                    customButtonRendered = true
-                    Text("Custom Button")
-                }
-            }
-            
-            composeTestRule.setContent {
-                A2UIProvider(componentRegistry = registry) {
-                    A2UIExtendedRenderer(
-                        document = A2UIDocument(
-                            version = "0.8",
-                            root = A2UINode(
-                                type = A2UINodeType.BUTTON,
-                                props = A2UIProps(text = "Test")
-                            )
-                        ),
-                        onAction = {}
-                    )
-                }
-            }
-            
-            assertTrue(customButtonRendered)
-            composeTestRule.onNodeWithText("Custom Button").assertExists()
-        }
-        */
+        assertEquals(customRegistry, config.componentRegistry)
+        assertEquals(customTheme, config.theme)
+        assertTrue(config.debug)
     }
-    
-    /**
-     * Mock test for theme application
-     */
-    fun testThemeIsApplied() {
-        // In a real test:
-        /*
-        @Test
-        fun testDarkThemeIsApplied() {
-            composeTestRule.setContent {
-                A2UIProvider(theme = A2UITheme.Dark) {
-                    Box(
-                        modifier = Modifier
-                            .testTag("themed-box")
-                            .background(useA2UITheme().colors.background)
-                    )
-                }
+
+    @Test
+    fun testConfigDataClassCopy() {
+        val config = A2UIConfig(debug = false)
+        val modified = config.copy(debug = true)
+
+        assertFalse(config.debug)
+        assertTrue(modified.debug)
+    }
+
+    // ------------------------------------------------------------------
+    // Default values
+    // ------------------------------------------------------------------
+
+    @Test
+    fun testDefaultConfigHasEmptyRegistry() {
+        val config = A2UIConfig()
+        assertFalse(config.componentRegistry.has("Button"))
+        assertFalse(config.componentRegistry.has("Text"))
+    }
+
+    @Test
+    fun testDefaultConfigUsesDefaultTheme() {
+        val config = A2UIConfig()
+        assertEquals(A2UITheme.Default, config.theme)
+    }
+
+    @Test
+    fun testDefaultConfigDebugIsFalse() {
+        val config = A2UIConfig()
+        assertFalse(config.debug)
+    }
+
+    // ------------------------------------------------------------------
+    // ComponentRegistry basic operations in provider context
+    // ------------------------------------------------------------------
+
+    @Test
+    fun testProviderRegistryCanRegisterPascalCaseTypes() {
+        val config = A2UIConfig(
+            componentRegistry = ComponentRegistry().apply {
+                register("Button") { _, _, _, _, _ -> }
+                register("TextField") { _, _, _, _, _ -> }
+                register("Card") { _, _, _, _, _ -> }
             }
-            
-            // Would need to verify the background color matches dark theme
-            composeTestRule.onNodeWithTag("themed-box").assertExists()
+        )
+
+        assertTrue(config.componentRegistry.has("Button"))
+        assertTrue(config.componentRegistry.has("TextField"))
+        assertTrue(config.componentRegistry.has("Card"))
+    }
+
+    @Test
+    fun testProviderRegistryWithA2UISurface() {
+        // Build a simple A2UISurface and verify the config can reference it
+        val surface = A2UISurface(
+            root = "root",
+            components = mapOf(
+                "root" to A2UIComponent(
+                    id = "root",
+                    component = "Text"
+                )
+            )
+        )
+
+        val config = A2UIConfig(
+            componentRegistry = ComponentRegistry().apply {
+                register("Text") { _, _, _, _, _ -> }
+            }
+        )
+
+        // The registry should have a renderer for the surface's root component type
+        val rootComponent = surface.components[surface.root]
+        assertNotNull(rootComponent)
+        assertTrue(config.componentRegistry.has(rootComponent.component))
+    }
+
+    @Test
+    fun testProviderWithHighContrastTheme() {
+        // Conceptual: the provider should make the theme available
+        val config = A2UIConfig(theme = A2UITheme.HighContrast)
+        assertEquals(A2UITheme.HighContrast, config.theme)
+    }
+
+    @Test
+    fun testProviderWithDarkTheme() {
+        val config = A2UIConfig(theme = A2UITheme.Dark)
+        assertEquals(A2UITheme.Dark, config.theme)
+    }
+
+    @Test
+    fun testNestedProvidersConcept() {
+        // Simulate parent and child registries
+        val parentRegistry = ComponentRegistry().apply {
+            register("Button") { _, _, _, _, _ -> }
         }
-        */
+        val childRegistry = ComponentRegistry().apply {
+            register("Card") { _, _, _, _, _ -> }
+        }
+
+        // Parent has Button but not Card
+        assertTrue(parentRegistry.has("Button"))
+        assertFalse(parentRegistry.has("Card"))
+
+        // Child has Card but not Button
+        assertFalse(childRegistry.has("Button"))
+        assertTrue(childRegistry.has("Card"))
+    }
+
+    @Test
+    fun testConfigWithCustomRegistryAndSurface() {
+        val registry = ComponentRegistry().apply {
+            register("Column") { _, _, _, _, _ -> }
+            register("Text") { _, _, _, _, _ -> }
+            register("Button") { _, _, _, _, _ -> }
+        }
+
+        val surface = A2UISurface(
+            root = "root",
+            components = mapOf(
+                "root" to A2UIComponent(id = "root", component = "Column"),
+                "title" to A2UIComponent(id = "title", component = "Text"),
+                "action" to A2UIComponent(id = "action", component = "Button")
+            )
+        )
+
+        // Verify all component types in the surface have registered renderers
+        for ((_, component) in surface.components) {
+            assertTrue(
+                registry.has(component.component),
+                "Registry should have renderer for '${component.component}'"
+            )
+        }
     }
 }

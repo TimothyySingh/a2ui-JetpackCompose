@@ -204,3 +204,27 @@ class A2UIThemeBuilder {
 fun buildA2UITheme(block: A2UIThemeBuilder.() -> Unit): A2UITheme {
     return A2UIThemeBuilder().apply(block).build()
 }
+
+/**
+ * Apply A2UISurfaceTheme primaryColor override to an A2UITheme.
+ */
+fun A2UITheme.withSurfaceTheme(surfaceTheme: com.a2ui.core.model.A2UISurfaceTheme?): A2UITheme {
+    if (surfaceTheme == null) return this
+    val primaryHex = surfaceTheme.primaryColor ?: return this
+    val primaryColor = parseHexColor(primaryHex) ?: return this
+    return copy(colors = colors.copy(primary = primaryColor))
+}
+
+private fun parseHexColor(hex: String): Color? {
+    return try {
+        val clean = hex.removePrefix("#")
+        val colorLong = when (clean.length) {
+            6 -> (0xFF000000 or clean.toLong(16))
+            8 -> clean.toLong(16)
+            else -> return null
+        }
+        Color(colorLong.toInt())
+    } catch (e: Exception) {
+        null
+    }
+}

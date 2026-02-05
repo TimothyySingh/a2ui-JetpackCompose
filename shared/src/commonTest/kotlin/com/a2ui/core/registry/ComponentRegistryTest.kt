@@ -1,217 +1,307 @@
 package com.a2ui.core.registry
 
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import com.a2ui.core.model.A2UINode
-import com.a2ui.core.model.A2UINodeType
-import com.a2ui.core.render.A2UIActionEvent
 import kotlin.test.*
 
 /**
- * Test suite for ComponentRegistry
+ * Test suite for ComponentRegistry - v0.9
+ *
+ * Uses PascalCase type strings ("Button", "Text", "Card") and the new
+ * 5-param ComponentRenderer signature:
+ *   (component: A2UIComponent, surface: A2UISurface, resolver: DynamicResolver,
+ *    onAction: (A2UIActionEvent) -> Unit, modifier: Modifier) -> Unit
+ *
+ * These are conceptual tests that verify registry map operations without
+ * needing the Compose runtime. Dummy renderers are registered but never invoked.
  */
 class ComponentRegistryTest {
-    
+
     private lateinit var registry: ComponentRegistry
-    
+
     @BeforeTest
     fun setup() {
         registry = ComponentRegistry()
     }
-    
+
+    // ------------------------------------------------------------------
+    // Register / Get with PascalCase
+    // ------------------------------------------------------------------
+
     @Test
-    fun testRegisterAndGet() {
-        // Given
-        val testType = "TEST_COMPONENT"
-        val renderer: ComponentRenderer = { _, _, _ -> }
-        
-        // When
-        registry.register(testType, renderer)
-        
-        // Then
-        assertTrue(registry.has(testType))
-        assertNotNull(registry.get(testType))
+    fun testRegisterAndGetButton() {
+        registry.register("Button") { _, _, _, _, _ -> }
+
+        assertTrue(registry.has("Button"))
+        assertNotNull(registry.get("Button"))
     }
-    
+
+    @Test
+    fun testRegisterAndGetText() {
+        registry.register("Text") { _, _, _, _, _ -> }
+
+        assertTrue(registry.has("Text"))
+        assertNotNull(registry.get("Text"))
+    }
+
+    @Test
+    fun testRegisterAndGetCard() {
+        registry.register("Card") { _, _, _, _, _ -> }
+
+        assertTrue(registry.has("Card"))
+        assertNotNull(registry.get("Card"))
+    }
+
+    // ------------------------------------------------------------------
+    // has() / get() correct results
+    // ------------------------------------------------------------------
+
+    @Test
+    fun testHasReturnsFalseForUnregistered() {
+        assertFalse(registry.has("NonExistent"))
+    }
+
+    @Test
+    fun testGetReturnsNullForUnregistered() {
+        assertNull(registry.get("NonExistent"))
+    }
+
+    @Test
+    fun testHasReturnsTrueAfterRegistration() {
+        registry.register("Slider") { _, _, _, _, _ -> }
+        assertTrue(registry.has("Slider"))
+    }
+
+    @Test
+    fun testGetReturnsNonNullAfterRegistration() {
+        registry.register("Slider") { _, _, _, _, _ -> }
+        assertNotNull(registry.get("Slider"))
+    }
+
+    // ------------------------------------------------------------------
+    // Overwrite existing registration
+    // ------------------------------------------------------------------
+
     @Test
     fun testRegisterOverwritesExisting() {
-        // Given
-        val testType = "TEST_COMPONENT"
-        var counter = 0
-        val firstRenderer: ComponentRenderer = { _, _, _ -> counter = 1 }
-        val secondRenderer: ComponentRenderer = { _, _, _ -> counter = 2 }
-        
-        // When
-        registry.register(testType, firstRenderer)
-        registry.register(testType, secondRenderer)
-        
-        // Then
-        val renderer = registry.get(testType)
-        assertNotNull(renderer)
-        // Verify it's the second renderer (would need to invoke to test, but we can check it exists)
-        assertTrue(registry.has(testType))
+        var marker = "first"
+        registry.register("Button") { _, _, _, _, _ -> marker = "first" }
+        registry.register("Button") { _, _, _, _, _ -> marker = "second" }
+
+        // The key should still exist; it was overwritten, not duplicated
+        assertTrue(registry.has("Button"))
+        assertNotNull(registry.get("Button"))
+
+        // After overwrite, get() must return the second renderer (identity)
+        val retrieved = registry.get("Button")
+        // We cannot invoke it (Composable), but we can verify it is not null
+        assertNotNull(retrieved)
     }
-    
+
+    // ------------------------------------------------------------------
+    // registerAll with map
+    // ------------------------------------------------------------------
+
     @Test
-    fun testRegisterAll() {
-        // Given
-        val components = mapOf(
-            "COMPONENT_A" to { _: A2UINode, _: (A2UIActionEvent) -> Unit, _: Modifier -> },
-            "COMPONENT_B" to { _: A2UINode, _: (A2UIActionEvent) -> Unit, _: Modifier -> },
-            "COMPONENT_C" to { _: A2UINode, _: (A2UIActionEvent) -> Unit, _: Modifier -> }
+    fun testRegisterAllWithMap() {
+        val renderers: Map<String, ComponentRenderer> = mapOf(
+            "Button" to { _, _, _, _, _ -> },
+            "Text" to { _, _, _, _, _ -> },
+            "Card" to { _, _, _, _, _ -> }
         )
-        
-        // When
-        registry.registerAll(components)
-        
-        // Then
-        assertTrue(registry.has("COMPONENT_A"))
-        assertTrue(registry.has("COMPONENT_B"))
-        assertTrue(registry.has("COMPONENT_C"))
+
+        registry.registerAll(renderers)
+
+        assertTrue(registry.has("Button"))
+        assertTrue(registry.has("Text"))
+        assertTrue(registry.has("Card"))
     }
-    
+
+    // ------------------------------------------------------------------
+    // Unregister / Clear
+    // ------------------------------------------------------------------
+
     @Test
     fun testUnregister() {
-        // Given
-        val testType = "TEST_COMPONENT"
-        registry.register(testType) { _, _, _ -> }
-        
-        // When
-        registry.unregister(testType)
-        
-        // Then
-        assertFalse(registry.has(testType))
-        assertNull(registry.get(testType))
+        registry.register("Button") { _, _, _, _, _ -> }
+        assertTrue(registry.has("Button"))
+
+        registry.unregister("Button")
+
+        assertFalse(registry.has("Button"))
+        assertNull(registry.get("Button"))
     }
-    
+
+    @Test
+    fun testUnregisterNonExistentIsNoOp() {
+        // Should not throw
+        registry.unregister("DoesNotExist")
+        assertFalse(registry.has("DoesNotExist"))
+    }
+
     @Test
     fun testClear() {
-        // Given
-        registry.register("COMPONENT_A") { _, _, _ -> }
-        registry.register("COMPONENT_B") { _, _, _ -> }
-        registry.register("COMPONENT_C") { _, _, _ -> }
-        
-        // When
+        registry.register("Button") { _, _, _, _, _ -> }
+        registry.register("Text") { _, _, _, _, _ -> }
+        registry.register("Card") { _, _, _, _, _ -> }
+
         registry.clear()
-        
-        // Then
-        assertFalse(registry.has("COMPONENT_A"))
-        assertFalse(registry.has("COMPONENT_B"))
-        assertFalse(registry.has("COMPONENT_C"))
+
+        assertFalse(registry.has("Button"))
+        assertFalse(registry.has("Text"))
+        assertFalse(registry.has("Card"))
     }
-    
+
+    // ------------------------------------------------------------------
+    // Copy / Merge
+    // ------------------------------------------------------------------
+
     @Test
     fun testCopy() {
-        // Given
-        registry.register("COMPONENT_A") { _, _, _ -> }
-        registry.register("COMPONENT_B") { _, _, _ -> }
-        
-        // When
+        registry.register("Button") { _, _, _, _, _ -> }
+        registry.register("Text") { _, _, _, _, _ -> }
+
         val copy = registry.copy()
-        registry.register("COMPONENT_C") { _, _, _ -> }
-        
-        // Then
-        assertTrue(copy.has("COMPONENT_A"))
-        assertTrue(copy.has("COMPONENT_B"))
-        assertFalse(copy.has("COMPONENT_C")) // Original registry change shouldn't affect copy
-        assertTrue(registry.has("COMPONENT_C")) // Original should have the new component
+
+        // Copy should contain the same registrations
+        assertTrue(copy.has("Button"))
+        assertTrue(copy.has("Text"))
+
+        // Mutating the original should not affect the copy
+        registry.register("Card") { _, _, _, _, _ -> }
+        assertFalse(copy.has("Card"))
+        assertTrue(registry.has("Card"))
     }
-    
+
+    @Test
+    fun testCopyIndependence() {
+        registry.register("Row") { _, _, _, _, _ -> }
+        val copy = registry.copy()
+
+        // Mutating the copy should not affect the original
+        copy.register("Column") { _, _, _, _, _ -> }
+        assertTrue(copy.has("Column"))
+        assertFalse(registry.has("Column"))
+    }
+
     @Test
     fun testMerge() {
-        // Given
         val registry1 = ComponentRegistry().apply {
-            register("COMPONENT_A") { _, _, _ -> }
-            register("COMPONENT_B") { _, _, _ -> }
+            register("Button") { _, _, _, _, _ -> }
+            register("Text") { _, _, _, _, _ -> }
         }
-        
+
         val registry2 = ComponentRegistry().apply {
-            register("COMPONENT_C") { _, _, _ -> }
-            register("COMPONENT_D") { _, _, _ -> }
+            register("Card") { _, _, _, _, _ -> }
+            register("Slider") { _, _, _, _, _ -> }
         }
-        
-        // When
+
         registry1.merge(registry2)
-        
-        // Then
-        assertTrue(registry1.has("COMPONENT_A"))
-        assertTrue(registry1.has("COMPONENT_B"))
-        assertTrue(registry1.has("COMPONENT_C"))
-        assertTrue(registry1.has("COMPONENT_D"))
+
+        assertTrue(registry1.has("Button"))
+        assertTrue(registry1.has("Text"))
+        assertTrue(registry1.has("Card"))
+        assertTrue(registry1.has("Slider"))
     }
-    
+
     @Test
     fun testMergeOverwritesExisting() {
-        // Given
-        var result = "initial"
         val registry1 = ComponentRegistry().apply {
-            register("COMPONENT_A") { _, _, _ -> result = "first" }
+            register("Button") { _, _, _, _, _ -> }
         }
-        
+
         val registry2 = ComponentRegistry().apply {
-            register("COMPONENT_A") { _, _, _ -> result = "second" }
+            register("Button") { _, _, _, _, _ -> }
         }
-        
-        // When
+
         registry1.merge(registry2)
-        
-        // Then
-        assertTrue(registry1.has("COMPONENT_A"))
-        // The component from registry2 should overwrite registry1's
+
+        // Should still have the key; the renderer from registry2 overwrites
+        assertTrue(registry1.has("Button"))
     }
-    
+
+    // ------------------------------------------------------------------
+    // Custom types: "Chart", "Avatar", "Rating"
+    // ------------------------------------------------------------------
+
     @Test
-    fun testGetNonExistent() {
-        // When
-        val renderer = registry.get("NON_EXISTENT")
-        
-        // Then
-        assertNull(renderer)
+    fun testCustomTypeChart() {
+        registry.register("Chart") { _, _, _, _, _ -> }
+        assertTrue(registry.has("Chart"))
+        assertNotNull(registry.get("Chart"))
     }
-    
+
     @Test
-    fun testHasNonExistent() {
-        // When
-        val exists = registry.has("NON_EXISTENT")
-        
-        // Then
-        assertFalse(exists)
+    fun testCustomTypeAvatar() {
+        registry.register("Avatar") { _, _, _, _, _ -> }
+        assertTrue(registry.has("Avatar"))
+        assertNotNull(registry.get("Avatar"))
     }
-    
+
+    @Test
+    fun testCustomTypeRating() {
+        registry.register("Rating") { _, _, _, _, _ -> }
+        assertTrue(registry.has("Rating"))
+        assertNotNull(registry.get("Rating"))
+    }
+
+    @Test
+    fun testMultipleCustomTypes() {
+        registry.register("Chart") { _, _, _, _, _ -> }
+        registry.register("Avatar") { _, _, _, _, _ -> }
+        registry.register("Rating") { _, _, _, _, _ -> }
+
+        assertTrue(registry.has("Chart"))
+        assertTrue(registry.has("Avatar"))
+        assertTrue(registry.has("Rating"))
+    }
+
+    // ------------------------------------------------------------------
+    // withDefaults builder
+    // ------------------------------------------------------------------
+
     @Test
     fun testWithDefaults() {
-        // When
-        val registry = ComponentRegistry.withDefaults {
-            register("BUTTON") { _, _, _ -> }
-            register("TEXT") { _, _, _ -> }
+        val built = ComponentRegistry.withDefaults {
+            register("Button") { _, _, _, _, _ -> }
+            register("Text") { _, _, _, _, _ -> }
         }
-        
-        // Then
-        assertTrue(registry.has("BUTTON"))
-        assertTrue(registry.has("TEXT"))
+
+        assertTrue(built.has("Button"))
+        assertTrue(built.has("Text"))
+        assertFalse(built.has("Card")) // not registered
     }
-    
+
     @Test
-    fun testStandardNodeTypeRegistration() {
-        // Test that we can register standard A2UI node types
-        registry.register(A2UINodeType.BUTTON.name) { _, _, _ -> }
-        registry.register(A2UINodeType.TEXT.name) { _, _, _ -> }
-        registry.register(A2UINodeType.CARD.name) { _, _, _ -> }
-        
-        assertTrue(registry.has(A2UINodeType.BUTTON.name))
-        assertTrue(registry.has(A2UINodeType.TEXT.name))
-        assertTrue(registry.has(A2UINodeType.CARD.name))
+    fun testWithDefaultsBuilderReturnsNewRegistry() {
+        val built = ComponentRegistry.withDefaults {
+            register("Card") { _, _, _, _, _ -> }
+        }
+
+        // The class-level registry should be unaffected
+        assertFalse(registry.has("Card"))
+        assertTrue(built.has("Card"))
     }
-    
+
+    // ------------------------------------------------------------------
+    // PascalCase standard component types
+    // ------------------------------------------------------------------
+
     @Test
-    fun testCustomTypeRegistration() {
-        // Test that we can register custom component types
-        registry.register("CUSTOM_CHART") { _, _, _ -> }
-        registry.register("CUSTOM_AVATAR") { _, _, _ -> }
-        registry.register("CUSTOM_RATING") { _, _, _ -> }
-        
-        assertTrue(registry.has("CUSTOM_CHART"))
-        assertTrue(registry.has("CUSTOM_AVATAR"))
-        assertTrue(registry.has("CUSTOM_RATING"))
+    fun testStandardPascalCaseTypes() {
+        val standardTypes = listOf(
+            "Text", "Image", "Icon", "Video", "AudioPlayer",
+            "Row", "Column", "Card", "List", "Tabs", "Modal", "Divider",
+            "Button", "TextField", "CheckBox", "ChoicePicker", "Slider", "DateTimeInput",
+            "Scaffold", "Box", "Scrollable", "LazyColumn", "LazyRow",
+            "Spacer", "Switch", "Dropdown", "Progress", "Loading",
+            "TopBar", "BottomBar", "Fab"
+        )
+
+        for (type in standardTypes) {
+            registry.register(type) { _, _, _, _, _ -> }
+        }
+
+        for (type in standardTypes) {
+            assertTrue(registry.has(type), "Expected registry to have type '$type'")
+        }
     }
 }

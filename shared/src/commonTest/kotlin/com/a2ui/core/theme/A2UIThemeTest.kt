@@ -4,54 +4,100 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.a2ui.core.model.A2UISurfaceTheme
 import kotlin.test.*
 
 /**
- * Test suite for A2UITheme
+ * Test suite for A2UITheme - v0.9
+ *
+ * Covers Default / Dark / HighContrast presets, the builder DSL,
+ * all data-class copy operations, and the new withSurfaceTheme extension.
  */
 class A2UIThemeTest {
-    
+
+    // ------------------------------------------------------------------
+    // Default theme
+    // ------------------------------------------------------------------
+
     @Test
     fun testDefaultTheme() {
-        // When
         val theme = A2UITheme.Default
-        
-        // Then
+
         assertEquals(Color(0xFF1976D2), theme.colors.primary)
         assertEquals(Color.White, theme.colors.background)
         assertEquals(16.sp, theme.typography.body.fontSize)
         assertEquals(16.dp, theme.spacing.md)
         assertEquals(8.dp, theme.shapes.medium)
     }
-    
+
+    // ------------------------------------------------------------------
+    // Dark theme
+    // ------------------------------------------------------------------
+
     @Test
     fun testDarkTheme() {
-        // When
         val theme = A2UITheme.Dark
-        
-        // Then
+
         assertEquals(Color(0xFF90CAF9), theme.colors.primary)
         assertEquals(Color(0xFF121212), theme.colors.background)
         assertEquals(Color.White, theme.colors.onBackground)
         assertEquals(Color.Black, theme.colors.onPrimary)
     }
-    
+
+    // ------------------------------------------------------------------
+    // High contrast theme
+    // ------------------------------------------------------------------
+
     @Test
     fun testHighContrastTheme() {
-        // When
         val theme = A2UITheme.HighContrast
-        
-        // Then
+
         assertEquals(Color.Black, theme.colors.primary)
         assertEquals(Color.White, theme.colors.background)
         assertEquals(Color.Red, theme.colors.error)
         assertEquals(Color.White, theme.colors.onPrimary)
         assertEquals(Color.Black, theme.colors.onBackground)
     }
-    
+
+    // ------------------------------------------------------------------
+    // withSurfaceTheme
+    // ------------------------------------------------------------------
+
+    @Test
+    fun testSurfaceThemePrimaryColor() {
+        val surfaceTheme = A2UISurfaceTheme(primaryColor = "#FF0000")
+        val themed = A2UITheme.Default.withSurfaceTheme(surfaceTheme)
+
+        // Primary color should be overridden to red
+        assertEquals(Color(0xFFFF0000.toInt()), themed.colors.primary)
+
+        // Everything else should remain at Default values
+        assertEquals(A2UITheme.Default.colors.background, themed.colors.background)
+        assertEquals(A2UITheme.Default.colors.secondary, themed.colors.secondary)
+        assertEquals(A2UITheme.Default.typography, themed.typography)
+        assertEquals(A2UITheme.Default.spacing, themed.spacing)
+    }
+
+    @Test
+    fun testSurfaceThemeNullPrimaryColorReturnsOriginal() {
+        val surfaceTheme = A2UISurfaceTheme(primaryColor = null)
+        val themed = A2UITheme.Default.withSurfaceTheme(surfaceTheme)
+
+        assertEquals(A2UITheme.Default.colors.primary, themed.colors.primary)
+    }
+
+    @Test
+    fun testSurfaceThemeNullReturnsOriginal() {
+        val themed = A2UITheme.Default.withSurfaceTheme(null)
+        assertEquals(A2UITheme.Default, themed)
+    }
+
+    // ------------------------------------------------------------------
+    // Theme builder DSL
+    // ------------------------------------------------------------------
+
     @Test
     fun testThemeBuilder() {
-        // When
         val theme = buildA2UITheme {
             colors {
                 copy(
@@ -93,8 +139,7 @@ class A2UIThemeTest {
                 )
             }
         }
-        
-        // Then
+
         assertEquals(Color.Blue, theme.colors.primary)
         assertEquals(Color.Green, theme.colors.secondary)
         assertEquals(Color.Gray, theme.colors.background)
@@ -111,30 +156,29 @@ class A2UIThemeTest {
         assertEquals(12.dp, theme.components.card.elevation)
         assertEquals(24.dp, theme.components.card.padding)
     }
-    
+
+    // ------------------------------------------------------------------
+    // Data class copy tests
+    // ------------------------------------------------------------------
+
     @Test
     fun testColorsDataClass() {
-        // Given
         val colors = A2UITheme.Colors()
-        
-        // When
+
         val modified = colors.copy(
             primary = Color.Red,
             onPrimary = Color.Yellow
         )
-        
-        // Then
+
         assertEquals(Color.Red, modified.primary)
         assertEquals(Color.Yellow, modified.onPrimary)
         assertEquals(colors.secondary, modified.secondary) // Others remain unchanged
     }
-    
+
     @Test
     fun testTypographyDataClass() {
-        // Given
         val typography = A2UITheme.Typography()
-        
-        // When
+
         val modified = typography.copy(
             h1 = A2UITheme.TextStyle(
                 fontSize = 48.sp,
@@ -142,110 +186,97 @@ class A2UIThemeTest {
                 fontWeight = FontWeight.Black
             )
         )
-        
-        // Then
+
         assertEquals(48.sp, modified.h1.fontSize)
         assertEquals(56.sp, modified.h1.lineHeight)
         assertEquals(FontWeight.Black, modified.h1.fontWeight)
         assertEquals(typography.body, modified.body) // Others unchanged
     }
-    
+
     @Test
     fun testSpacingDataClass() {
-        // Given
         val spacing = A2UITheme.Spacing()
-        
-        // When
+
         val modified = spacing.copy(
             xs = 2.dp,
             xxl = 64.dp
         )
-        
-        // Then
+
         assertEquals(2.dp, modified.xs)
         assertEquals(64.dp, modified.xxl)
         assertEquals(spacing.md, modified.md) // Others unchanged
     }
-    
+
     @Test
     fun testButtonStylesDataClass() {
-        // Given
         val buttonStyles = A2UITheme.ButtonStyles()
-        
-        // When
+
         val modified = buttonStyles.copy(
             minHeight = 64.dp,
             horizontalPadding = 32.dp,
             verticalPadding = 16.dp,
             cornerRadius = 24.dp
         )
-        
-        // Then
+
         assertEquals(64.dp, modified.minHeight)
         assertEquals(32.dp, modified.horizontalPadding)
         assertEquals(16.dp, modified.verticalPadding)
         assertEquals(24.dp, modified.cornerRadius)
     }
-    
+
     @Test
     fun testCardStylesDataClass() {
-        // Given
         val cardStyles = A2UITheme.CardStyles()
-        
-        // When
+
         val modified = cardStyles.copy(
             elevation = 16.dp,
             padding = 32.dp,
             cornerRadius = 24.dp
         )
-        
-        // Then
+
         assertEquals(16.dp, modified.elevation)
         assertEquals(32.dp, modified.padding)
         assertEquals(24.dp, modified.cornerRadius)
     }
-    
+
     @Test
     fun testTextFieldStylesDataClass() {
-        // Given
         val textFieldStyles = A2UITheme.TextFieldStyles()
-        
-        // When
+
         val modified = textFieldStyles.copy(
             padding = 16.dp,
             cornerRadius = 8.dp
         )
-        
-        // Then
+
         assertEquals(16.dp, modified.padding)
         assertEquals(8.dp, modified.cornerRadius)
     }
-    
+
     @Test
     fun testTextStyleDataClass() {
-        // Given
         val textStyle = A2UITheme.TextStyle(
             fontSize = 16.sp,
             lineHeight = 24.sp
         )
-        
-        // When
+
         val modified = textStyle.copy(
             fontSize = 20.sp,
             letterSpacing = 1.sp,
             fontWeight = FontWeight.Bold
         )
-        
-        // Then
+
         assertEquals(20.sp, modified.fontSize)
         assertEquals(24.sp, modified.lineHeight) // Unchanged
         assertEquals(1.sp, modified.letterSpacing)
         assertEquals(FontWeight.Bold, modified.fontWeight)
     }
-    
+
+    // ------------------------------------------------------------------
+    // Complete theme customization
+    // ------------------------------------------------------------------
+
     @Test
     fun testCompleteThemeCustomization() {
-        // Test creating a completely custom theme
         val customTheme = A2UITheme(
             colors = A2UITheme.Colors(
                 primary = Color(0xFF123456),
@@ -303,8 +334,7 @@ class A2UIThemeTest {
                 )
             )
         )
-        
-        // Verify all values are correctly set
+
         assertEquals(Color(0xFF123456), customTheme.colors.primary)
         assertEquals(50.sp, customTheme.typography.h1.fontSize)
         assertEquals(2.dp, customTheme.spacing.xs)

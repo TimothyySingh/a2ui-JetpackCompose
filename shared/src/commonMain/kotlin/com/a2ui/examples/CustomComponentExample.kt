@@ -1,6 +1,8 @@
 package com.a2ui.examples
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -12,7 +14,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -22,21 +23,21 @@ import androidx.compose.ui.unit.sp
 import com.a2ui.core.model.*
 import com.a2ui.core.provider.A2UIProvider
 import com.a2ui.core.registry.ComponentRegistry
-import com.a2ui.core.render.A2UIActionEvent
 import com.a2ui.core.render.A2UIExtendedRenderer
-import com.a2ui.core.render.RenderNodeWithRegistry
+import com.a2ui.core.render.RenderComponent
+import com.a2ui.core.resolve.*
 import com.a2ui.core.theme.A2UITheme
 import com.a2ui.core.theme.buildA2UITheme
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.*
 
 /**
- * Example: Custom Button Component
- * A gradient button with animations
+ * Custom Gradient Button - v0.9 compatible.
  */
 @Composable
 fun CustomGradientButton(
-    node: A2UINode,
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
     onAction: (A2UIActionEvent) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -45,22 +46,19 @@ fun CustomGradientButton(
         targetValue = if (isPressed) 0.95f else 1f,
         label = "button_scale"
     )
-    
-    val clickAction = node.actions?.find { it.event == A2UIEventType.CLICK }
-    
+
+    val action = component.action()
+    val enabled = component.isEnabled(resolver)
+
     Button(
         onClick = {
-            clickAction?.let {
-                onAction(A2UIActionEvent(node.id, it.handler, it.payload))
+            if (action?.name != null) {
+                onAction(A2UIActionEvent(component.id, action.name, action.context))
             }
         },
-        modifier = modifier
-            .scale(scale)
-            .height(56.dp),
-        enabled = node.props?.enabled ?: true,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = Color.Transparent
-        ),
+        modifier = modifier.scale(scale).height(56.dp),
+        enabled = enabled,
+        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
         contentPadding = PaddingValues(0.dp)
     ) {
         Box(
@@ -68,10 +66,7 @@ fun CustomGradientButton(
                 .fillMaxSize()
                 .background(
                     brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color(0xFF667EEA),
-                            Color(0xFF764BA2)
-                        )
+                        colors = listOf(Color(0xFF667EEA), Color(0xFF764BA2))
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ),
@@ -81,13 +76,9 @@ fun CustomGradientButton(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    Icons.Default.Star,
-                    contentDescription = null,
-                    tint = Color.White
-                )
+                Icon(Icons.Default.Star, contentDescription = null, tint = Color.White)
                 Text(
-                    text = node.props?.text ?: "Custom Button",
+                    text = component.text(resolver) ?: "Custom Button",
                     color = Color.White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
@@ -98,19 +89,18 @@ fun CustomGradientButton(
 }
 
 /**
- * Example: Custom Card Component
- * A neumorphic-style card with shadow effects
+ * Custom Neumorphic Card - v0.9 compatible.
  */
 @Composable
 fun CustomNeumorphicCard(
-    node: A2UINode,
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
     onAction: (A2UIActionEvent) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(4.dp),
+        modifier = modifier.fillMaxWidth().padding(4.dp),
         shape = RoundedCornerShape(20.dp),
         shadowElevation = 8.dp,
         color = Color(0xFFF0F0F3)
@@ -119,27 +109,23 @@ fun CustomNeumorphicCard(
             modifier = Modifier
                 .background(
                     brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.7f),
-                            Color(0xFFF0F0F3)
-                        )
+                        colors = listOf(Color.White.copy(alpha = 0.7f), Color(0xFFF0F0F3))
                     )
                 )
                 .border(
                     width = 1.dp,
                     brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color.White,
-                            Color(0xFFE0E0E3)
-                        )
+                        colors = listOf(Color.White, Color(0xFFE0E0E3))
                     ),
                     shape = RoundedCornerShape(20.dp)
                 )
                 .padding(20.dp)
         ) {
             Column {
-                node.children?.forEach { child ->
-                    RenderNodeWithRegistry(child, onAction)
+                val childResolver = ChildListResolver(resolver)
+                val children = childResolver.resolve(component.children, surface.components)
+                for (child in children) {
+                    RenderComponent(child.componentId, surface, resolver, onAction)
                 }
             }
         }
@@ -147,44 +133,47 @@ fun CustomNeumorphicCard(
 }
 
 /**
- * Example: Custom Text Component
- * Text with animated gradient colors
+ * Custom Animated Text - v0.9 compatible.
  */
 @Composable
 fun CustomAnimatedText(
-    node: A2UINode,
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
     onAction: (A2UIActionEvent) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "text_gradient")
-    
+    val text = component.text(resolver) ?: ""
+
     Text(
-        text = node.props?.text ?: "",
+        text = text,
         modifier = modifier,
-        fontSize = node.props?.style?.size?.sp ?: 16.sp,
+        fontSize = 16.sp,
         fontWeight = FontWeight.Bold,
         color = Color(0xFF667EEA)
     )
 }
 
 /**
- * Example: Custom Chip/Tag Component
- * For displaying tags or categories
+ * Custom Chip - v0.9 compatible.
  */
 @Composable
 fun CustomChip(
-    node: A2UINode,
+    component: A2UIComponent,
+    surface: A2UISurface,
+    resolver: DynamicResolver,
     onAction: (A2UIActionEvent) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val clickAction = node.actions?.find { it.event == A2UIEventType.CLICK }
-    val text = node.props?.text ?: "Chip"
-    val selected = node.props?.checked ?: false
-    
+    val action = component.action()
+    val text = component.text(resolver) ?: "Chip"
+    val selected = resolver.resolveBoolean(component.properties["selected"]) ?: false
+
     Surface(
         onClick = {
-            clickAction?.let {
-                onAction(A2UIActionEvent(node.id, it.handler, it.payload))
+            if (action?.name != null) {
+                onAction(A2UIActionEvent(component.id, action.name, action.context))
             }
         },
         modifier = modifier,
@@ -205,33 +194,27 @@ fun CustomChip(
 }
 
 /**
- * Example: Create a custom component registry
+ * Create a custom component registry using PascalCase types.
  */
 fun createCustomComponentRegistry(): ComponentRegistry {
     return ComponentRegistry().apply {
-        // Override standard button with gradient version
-        register(A2UINodeType.BUTTON.name) { node, onAction, modifier ->
-            CustomGradientButton(node, onAction, modifier)
+        register("Button") { component, surface, resolver, onAction, modifier ->
+            CustomGradientButton(component, surface, resolver, onAction, modifier)
         }
-        
-        // Override card with neumorphic style
-        register(A2UINodeType.CARD.name) { node, onAction, modifier ->
-            CustomNeumorphicCard(node, onAction, modifier)
+        register("Card") { component, surface, resolver, onAction, modifier ->
+            CustomNeumorphicCard(component, surface, resolver, onAction, modifier)
         }
-        
-        // Add custom component types
-        register("CHIP") { node, onAction, modifier ->
-            CustomChip(node, onAction, modifier)
+        register("Chip") { component, surface, resolver, onAction, modifier ->
+            CustomChip(component, surface, resolver, onAction, modifier)
         }
-        
-        register("ANIMATED_TEXT") { node, onAction, modifier ->
-            CustomAnimatedText(node, onAction, modifier)
+        register("AnimatedText") { component, surface, resolver, onAction, modifier ->
+            CustomAnimatedText(component, surface, resolver, onAction, modifier)
         }
     }
 }
 
 /**
- * Example: Create a custom theme
+ * Create a custom theme.
  */
 fun createCustomTheme(): A2UITheme {
     return buildA2UITheme {
@@ -244,7 +227,6 @@ fun createCustomTheme(): A2UITheme {
                 surface = Color.White
             )
         }
-        
         typography {
             copy(
                 h1 = h1.copy(fontSize = 36.sp, fontWeight = FontWeight.Black),
@@ -252,17 +234,9 @@ fun createCustomTheme(): A2UITheme {
                 body = body.copy(fontSize = 16.sp, lineHeight = 24.sp)
             )
         }
-        
         spacing {
-            copy(
-                xs = 4.dp,
-                sm = 8.dp,
-                md = 16.dp,
-                lg = 32.dp,
-                xl = 48.dp
-            )
+            copy(xs = 4.dp, sm = 8.dp, md = 16.dp, lg = 32.dp, xl = 48.dp)
         }
-        
         components {
             copy(
                 button = button.copy(
@@ -281,172 +255,132 @@ fun createCustomTheme(): A2UITheme {
 }
 
 /**
- * Example: Complete app with custom components
+ * Complete custom app using v0.9 surface model.
  */
 @Composable
 fun CustomA2UIApp() {
     val customRegistry = remember { createCustomComponentRegistry() }
     val customTheme = remember { createCustomTheme() }
-    
-    // Sample document with custom components
-    val document = remember {
-        A2UIDocument(
-            version = "0.8",
-            root = A2UINode(
-                type = A2UINodeType.SCAFFOLD,
-                children = listOf(
-                    A2UINode(
-                        type = A2UINodeType.TOP_BAR,
-                        props = A2UIProps(text = "Custom A2UI Demo")
-                    ),
-                    A2UINode(
-                        type = A2UINodeType.SCROLLABLE,
-                        children = listOf(
-                            A2UINode(
-                                type = A2UINodeType.COLUMN,
-                                props = A2UIProps(
-                                    padding = A2UIPadding(all = 16),
-                                    arrangement = A2UIArrangement.SPACE_BETWEEN
-                                ),
-                                children = listOf(
-                                    // Custom animated text
-                                    A2UINode(
-                                        id = "title",
-                                        type = A2UINodeType.CUSTOM,
-                                        props = A2UIProps(
-                                            text = "Welcome to Custom A2UI!",
-                                            style = A2UITextStyle(size = 28)
-                                        )
-                                    ),
-                                    
-                                    // Neumorphic card
-                                    A2UINode(
-                                        type = A2UINodeType.CARD,
-                                        children = listOf(
-                                            A2UINode(
-                                                type = A2UINodeType.COLUMN,
-                                                children = listOf(
-                                                    A2UINode(
-                                                        type = A2UINodeType.TEXT,
-                                                        props = A2UIProps(
-                                                            text = "Custom Card Content",
-                                                            style = A2UITextStyle(
-                                                                size = 20,
-                                                                weight = A2UIFontWeight.BOLD
-                                                            )
-                                                        )
-                                                    ),
-                                                    A2UINode(
-                                                        type = A2UINodeType.SPACER,
-                                                        props = A2UIProps(
-                                                            height = A2UIDimension(
-                                                                type = A2UIDimensionType.DP,
-                                                                value = 8f
-                                                            )
-                                                        )
-                                                    ),
-                                                    A2UINode(
-                                                        type = A2UINodeType.TEXT,
-                                                        props = A2UIProps(
-                                                            text = "This card uses a custom neumorphic style with gradient backgrounds."
-                                                        )
-                                                    )
-                                                )
-                                            )
-                                        )
-                                    ),
-                                    
-                                    // Row of custom chips
-                                    A2UINode(
-                                        type = A2UINodeType.ROW,
-                                        props = A2UIProps(
-                                            arrangement = A2UIArrangement.SPACE_EVENLY
-                                        ),
-                                        children = listOf("Design", "Development", "Testing").map { tag ->
-                                            A2UINode(
-                                                id = "chip_$tag",
-                                                type = A2UINodeType.CUSTOM,
-                                                props = A2UIProps(
-                                                    text = tag,
-                                                    checked = tag == "Design"
-                                                ),
-                                                actions = listOf(
-                                                    A2UIAction(
-                                                        event = A2UIEventType.CLICK,
-                                                        handler = "selectTag",
-                                                        payload = JsonPrimitive(tag)
-                                                    )
-                                                )
-                                            )
-                                        }
-                                    ),
-                                    
-                                    // Gradient button
-                                    A2UINode(
-                                        id = "gradient_button",
-                                        type = A2UINodeType.BUTTON,
-                                        props = A2UIProps(
-                                            text = "Click Me!",
-                                            width = A2UIDimension(A2UIDimensionType.FILL)
-                                        ),
-                                        actions = listOf(
-                                            A2UIAction(
-                                                event = A2UIEventType.CLICK,
-                                                handler = "handleClick"
-                                            )
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
+
+    val surface = remember {
+        val components = mutableMapOf<String, A2UIComponent>()
+        fun add(c: A2UIComponent) { components[c.id] = c }
+
+        add(A2UIComponent(
+            id = "root",
+            component = "Column",
+            children = JsonArray(listOf("title", "card1", "chip_row", "gradient_btn").map { JsonPrimitive(it) })
+        ))
+
+        add(A2UIComponent(
+            id = "title",
+            component = "Text",
+            properties = buildJsonObject {
+                put("text", "Custom A2UI Demo!")
+                put("variant", "h2")
+            }
+        ))
+
+        add(A2UIComponent(
+            id = "card1",
+            component = "Card",
+            children = JsonArray(listOf("card_col").map { JsonPrimitive(it) })
+        ))
+
+        add(A2UIComponent(
+            id = "card_col",
+            component = "Column",
+            children = JsonArray(listOf("card_title", "card_desc").map { JsonPrimitive(it) })
+        ))
+
+        add(A2UIComponent(
+            id = "card_title",
+            component = "Text",
+            properties = buildJsonObject {
+                put("text", "Custom Card Content")
+                put("variant", "h4")
+            }
+        ))
+
+        add(A2UIComponent(
+            id = "card_desc",
+            component = "Text",
+            properties = buildJsonObject {
+                put("text", "This card uses a custom neumorphic style with gradient backgrounds.")
+            }
+        ))
+
+        add(A2UIComponent(
+            id = "chip_row",
+            component = "Row",
+            properties = buildJsonObject { put("justify", "spaceEvenly") },
+            children = JsonArray(listOf("chip_design", "chip_dev", "chip_test").map { JsonPrimitive(it) })
+        ))
+
+        listOf("Design" to true, "Development" to false, "Testing" to false).forEachIndexed { _, (label, sel) ->
+            add(A2UIComponent(
+                id = "chip_${label.lowercase()}",
+                component = "Chip",
+                properties = buildJsonObject {
+                    put("text", label)
+                    put("selected", sel)
+                    putJsonObject("action") { put("name", "selectTag") }
+                }
+            ))
+        }
+
+        add(A2UIComponent(
+            id = "gradient_btn",
+            component = "Button",
+            properties = buildJsonObject {
+                put("text", "Click Me!")
+                putJsonObject("action") { put("name", "handleClick") }
+            }
+        ))
+
+        A2UISurface(root = "root", components = components)
     }
-    
+
     A2UIProvider(
         componentRegistry = customRegistry,
         theme = customTheme
     ) {
         A2UIExtendedRenderer(
-            document = document,
+            surface = surface,
             onAction = { event ->
-                // Handle actions
-                println("Action: ${event.handler} from ${event.nodeId} with ${event.payload}")
+                println("Action: ${event.actionName} from ${event.componentId}")
             }
         )
     }
 }
 
 /**
- * Example: Partial override - only customize specific components
+ * Partial override - only customize buttons.
  */
 @Composable
 fun PartialOverrideExample() {
-    // Only override buttons, keep everything else default
     val partialRegistry = ComponentRegistry().apply {
-        register(A2UINodeType.BUTTON.name) { node, onAction, modifier ->
-            // Simple outlined button override
+        register("Button") { component, surface, resolver, onAction, modifier ->
+            val action = component.action()
             OutlinedButton(
                 onClick = {
-                    node.actions?.find { it.event == A2UIEventType.CLICK }?.let {
-                        onAction(A2UIActionEvent(node.id, it.handler, it.payload))
+                    if (action?.name != null) {
+                        onAction(A2UIActionEvent(component.id, action.name, action.context))
                     }
                 },
                 modifier = modifier,
                 border = BorderStroke(2.dp, Color(0xFF667EEA))
             ) {
                 Text(
-                    node.props?.text ?: "Button",
+                    component.text(resolver) ?: "Button",
                     color = Color(0xFF667EEA),
                     fontWeight = FontWeight.Bold
                 )
             }
         }
     }
-    
+
     A2UIProvider(componentRegistry = partialRegistry) {
-        // Your A2UI content here
+        // Content here
     }
 }
